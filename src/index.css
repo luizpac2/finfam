@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-brand-light text-brand-gray font-sans antialiased;
+  }
+}
+
+@layer components {
+  /* Botão primário reutilizável construído sobre a paleta da marca. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-brand-aqua px-4 py-2
+      font-medium text-brand-moss shadow-sm transition
+      hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-brand-moss
+      disabled:cursor-not-allowed disabled:opacity-60;
+  }
+}
