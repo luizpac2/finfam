@@ -113,6 +113,31 @@ const resolveType = (amount: number, trnType?: string): TransactionType => {
  */
 const readFileText = async (file: File): Promise<string> => {
   const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  // UTF-16 com BOM.
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(buffer);
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(buffer);
+  }
+
+  // UTF-16 sem BOM: bytes nulos frequentes indicam texto de 2 bytes/caractere.
+  const sample = bytes.subarray(0, Math.min(bytes.length, 400));
+  let nullEven = 0;
+  let nullOdd = 0;
+  for (let i = 0; i < sample.length; i += 1) {
+    if (sample[i] === 0x00) {
+      if (i % 2 === 0) nullEven += 1;
+      else nullOdd += 1;
+    }
+  }
+  const threshold = sample.length / 8;
+  if (nullOdd > threshold) return new TextDecoder('utf-16le').decode(buffer);
+  if (nullEven > threshold) return new TextDecoder('utf-16be').decode(buffer);
+
+  // UTF-8, com fallback para Windows-1252 (comum em bancos BR).
   const utf8 = new TextDecoder('utf-8').decode(buffer);
   if (utf8.includes('�')) {
     try {
@@ -172,8 +197,18 @@ const parseOfxTransaction = (block: string): ParsedTransaction | null => {
 export const parseOfx = (content: string): ParsedTransaction[] => {
   const blocks = content.split(/<STMTTRN>/i).slice(1);
   if (blocks.length === 0) {
+    // Diagnóstico: lista as tags presentes para revelar a estrutura do arquivo.
+    const foundTags = [
+      ...new Set(
+        (content.match(/<[A-Za-z][A-Za-z0-9.]*/g) ?? []).map((t) =>
+          t.toUpperCase()
+        )
+      ),
+    ].slice(0, 12);
     throw new FileParseError(
-      'Não encontramos lançamentos (blocos <STMTTRN>) neste arquivo OFX/OFC.'
+      foundTags.length > 0
+        ? `Não encontramos blocos <STMTTRN>. Tags no arquivo: ${foundTags.join(', ')}.`
+        : 'Não conseguimos ler o conteúdo (codificação incomum ou arquivo vazio).'
     );
   }
 
