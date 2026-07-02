@@ -92,15 +92,15 @@ export function ReviewTransactions({
         </p>
       ) : (
         <div className="max-h-[calc(100vh-19rem)] overflow-auto">
-          <table className="border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-brand-light text-xs uppercase tracking-wide text-brand-gray">
               <tr>
-                <th className="px-3 py-2 font-medium">Data</th>
+                <th className="w-[9.5rem] px-3 py-2 font-medium">Data</th>
                 <th className="px-3 py-2 font-medium">Descrição</th>
-                <th className="px-3 py-2 font-medium">Tipo</th>
-                <th className="px-3 py-2 font-medium">Categoria</th>
-                <th className="px-3 py-2 text-right font-medium">Valor</th>
-                <th className="px-2 py-2" />
+                <th className="w-[8rem] px-3 py-2 font-medium">Tipo</th>
+                <th className="w-[17rem] px-3 py-2 font-medium">Categoria</th>
+                <th className="w-[8.5rem] px-3 py-2 text-right font-medium">Valor</th>
+                <th className="w-[3.5rem] px-2 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-moss/10">
@@ -116,7 +116,7 @@ export function ReviewTransactions({
                         onChange={(e) =>
                           onChangeRow(index, { date: e.target.value })
                         }
-                        className={`${inputClass} w-[8.5rem]`}
+                        className={inputClass}
                         aria-label="Data"
                       />
                     </td>
@@ -128,7 +128,7 @@ export function ReviewTransactions({
                         onChange={(e) =>
                           onChangeRow(index, { description: e.target.value })
                         }
-                        className={`${inputClass} w-[22rem]`}
+                        className={inputClass}
                         aria-label="Descrição"
                       />
                     </td>
@@ -141,7 +141,7 @@ export function ReviewTransactions({
                             type: e.target.value as TransactionType,
                           })
                         }
-                        className={`${inputClass} w-[6.5rem] ${
+                        className={`${inputClass} ${
                           row.type === 'income'
                             ? 'text-brand-aqua'
                             : 'text-brand-moss'
@@ -171,7 +171,7 @@ export function ReviewTransactions({
                           onChange={(e) =>
                             onChangeRow(index, { categoryId: e.target.value })
                           }
-                          className={`${inputClass} w-[15rem]`}
+                          className={inputClass}
                           aria-label="Categoria"
                         >
                           <option value="">Sem categoria</option>
@@ -195,7 +195,7 @@ export function ReviewTransactions({
                             amount: Math.abs(Number(e.target.value)) || 0,
                           })
                         }
-                        className={`${inputClass} w-[7rem] text-right font-medium ${
+                        className={`${inputClass} text-right font-medium ${
                           row.type === 'income'
                             ? 'text-brand-aqua'
                             : 'text-brand-moss'
