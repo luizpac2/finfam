@@ -374,69 +374,95 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
 // Texto genérico (usado por PDF e TXT sem estrutura)
 // =============================================================================
 
-const TEXT_DATE = /\d{2}\/\d{2}\/\d{2,4}/; // dd/mm/aaaa
-const AMOUNT_IN_TOKEN = /\d{1,3}(?:\.\d{3})*,\d{2}/; // valor monetário BR
+// Linha de lançamento: Dia … Valor (+)/(-).  Grupos: data | meio | valor | sinal | resto
+const TX_LINE =
+  /^(\d{2}\/\d{2}\/\d{4})\s+(.*?)(\d{1,3}(?:\.\d{3})*,\d{2})\s*\(([+-])\)(.*)$/;
+
+// Cabeçalhos/rodapés/saldos que não fazem parte do histórico.
+const NOISE_LINE =
+  /^(extrato de conta|cliente\b|per[ií]odo|ag[êe]ncia|lan[çc]amentos|dia lote|informa[çc]|total\b|taxa\b|tributos|custo efetivo|data venc|valor (total|liberado)|despesas|tarifa\b|\(\*\)|saldo\b|s a l d o|limite\b)/i;
+
+const isNoiseLine = (line: string): boolean => {
+  const compact = line.replace(/\s+/g, '').toLowerCase();
+  if (/^(bancodobrasil)+$/.test(compact)) return true; // marca d'água
+  return NOISE_LINE.test(line);
+};
+
+/** Remove códigos numéricos iniciais (Lote/Documento) mantendo o texto. */
+const stripLeadingCodes = (value: string): string => {
+  const tokens = value.trim().split(/\s+/).filter(Boolean);
+  let i = 0;
+  while (i < tokens.length && /^[\d.\-/]+$/.test(tokens[i])) i += 1;
+  return tokens.slice(i).join(' ');
+};
+
+interface Pending {
+  date: string;
+  amount: number;
+  type: TransactionType;
+  parts: string[];
+}
 
 /**
  * Converte texto bruto de extrato em lançamentos padronizados.
  *
- * Heurística pensada para extratos brasileiros — ex.: Banco do Brasil, cujas
- * colunas são **Dia | Lote | Documento | Histórico | Valor**:
- *  - a DATA é o primeiro dd/mm/aaaa da linha;
- *  - o VALOR é o último número monetário (a coluna Valor fica à direita);
- *  - o SINAL define o tipo: negativo (`-`/`D`) → despesa; positivo → receita;
- *  - a DESCRIÇÃO usa só o **Histórico**, pulando as colunas numéricas
- *    iniciais (Lote e Documento).
+ * Formato do Banco do Brasil (colunas Dia | Lote | Documento | Histórico |
+ * Valor): a linha do lançamento traz `Dia … Valor (+)/(-)`, e o **Histórico
+ * ocupa as linhas seguintes**. Portanto:
+ *  - o SINAL `(+)` → receita e `(-)` → despesa;
+ *  - a DESCRIÇÃO acumula o texto até o próximo lançamento, ignorando as
+ *    colunas numéricas (Lote/Documento), saldos e ruídos.
  */
 export const parseStatementText = (text: string): ParsedTransaction[] => {
+  const lines = text
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
   const transactions: ParsedTransaction[] = [];
+  let current: Pending | null = null;
 
-  for (const rawLine of text.split('\n')) {
-    const tokens = rawLine.replace(/\s+/g, ' ').trim().split(' ');
-    if (tokens.length === 0) continue;
-
-    const dateIdx = tokens.findIndex((t) => TEXT_DATE.test(t));
-    if (dateIdx === -1) continue;
-    const date = parseFlexibleDate((tokens[dateIdx].match(TEXT_DATE) ?? [''])[0]);
-    if (!date) continue;
-
-    // Último token monetário à direita da data = coluna "Valor".
-    let amountIdx = -1;
-    for (let k = tokens.length - 1; k > dateIdx; k -= 1) {
-      if (AMOUNT_IN_TOKEN.test(tokens[k])) {
-        amountIdx = k;
-        break;
-      }
+  const flush = () => {
+    if (current && current.amount > 0) {
+      const description = current.parts.join(' ').replace(/\s+/g, ' ').trim();
+      transactions.push({
+        date: current.date,
+        description: description || 'Lançamento',
+        amount: current.amount,
+        type: current.type,
+      });
     }
-    if (amountIdx === -1) continue;
+    current = null;
+  };
 
-    const amountToken = tokens[amountIdx];
-    const nextToken = tokens[amountIdx + 1] ?? '';
-    const rawAmount = (amountToken.match(AMOUNT_IN_TOKEN) ?? [''])[0];
-    const amount = parseAmount(rawAmount);
-    if (Number.isNaN(amount) || amount === 0) continue;
+  for (const line of lines) {
+    const match = line.match(TX_LINE);
+    if (match) {
+      flush();
+      const [, dmy, middle, rawValue, sign, trailing] = match;
+      const date = parseFlexibleDate(dmy);
+      const amount = parseAmount(rawValue);
+      current =
+        date && !Number.isNaN(amount)
+          ? {
+              date,
+              amount: Math.abs(amount),
+              type: sign === '-' ? 'expense' : 'income',
+              parts: [stripLeadingCodes(middle), trailing.trim()].filter(Boolean),
+            }
+          : null;
+      continue;
+    }
 
-    // Sinal: "-" junto do valor, ou sufixo "-"/"D" logo depois.
-    const isNegative =
-      amountToken.includes('-') ||
-      /^-/.test(nextToken) ||
-      /^d$/i.test(nextToken) ||
-      /d$/i.test(amountToken);
-    const type: TransactionType = isNegative ? 'expense' : 'income';
-
-    // Histórico: entre a data e o valor, ignorando colunas numéricas.
-    const between = tokens.slice(dateIdx + 1, amountIdx);
-    let i = 0;
-    while (i < between.length && /^[\d.\-+/]+$/.test(between[i])) i += 1;
-    const historico = between.slice(i).join(' ').trim();
-
-    transactions.push({
-      date,
-      description: historico || 'Lançamento',
-      amount: Math.abs(amount),
-      type,
-    });
+    if (!current) continue;
+    if (isNoiseLine(line)) {
+      // "Saldo do dia" e afins encerram o histórico do lançamento atual.
+      if (/^(saldo|s a l d o)/i.test(line)) flush();
+      continue;
+    }
+    current.parts.push(line);
   }
+  flush();
 
   return transactions;
 };
