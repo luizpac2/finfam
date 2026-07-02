@@ -425,16 +425,12 @@ export const parseStatementText = (text: string): ParsedTransaction[] => {
   const flush = () => {
     if (current && current.amount > 0) {
       const description = current.parts.join(' ').replace(/\s+/g, ' ').trim();
-      // Ignora as transferências automáticas de aplicação/resgate ("BB Rende
-      // Fácil"): não são receitas/despesas reais e inflariam os totais.
-      if (!/rende\s*f[aá]cil/i.test(description)) {
-        transactions.push({
-          date: current.date,
-          description: description || 'Lançamento',
-          amount: current.amount,
-          type: current.type,
-        });
-      }
+      transactions.push({
+        date: current.date,
+        description: description || 'Lançamento',
+        amount: current.amount,
+        type: current.type,
+      });
     }
     current = null;
   };
@@ -556,6 +552,18 @@ export const parsePdf = async (
 const getExtension = (fileName: string): string =>
   fileName.split('.').pop()?.toLowerCase() ?? '';
 
+/**
+ * Lançamentos automáticos que NÃO representam receita/despesa reais e que
+ * devem ser ignorados em qualquer formato (ex.: aplicação/resgate automático
+ * "BB Rende Fácil"). Filtra pela descrição.
+ */
+const IGNORED_DESCRIPTION = /rende\s*f[aá]cil/i;
+
+const excludeIgnored = (
+  transactions: ParsedTransaction[]
+): ParsedTransaction[] =>
+  transactions.filter((tx) => !IGNORED_DESCRIPTION.test(tx.description));
+
 /** Roteia o conteúdo textual para o parser certo (com sniff de OFX/CSV). */
 const parseTextContent = (text: string, ext: string): ParsedTransaction[] => {
   // Sniff pelo conteúdo: se parece OFX, usa o parser OFX mesmo se a extensão
@@ -598,10 +606,10 @@ export const parseStatementFile = async (
 
   try {
     if (extension === 'pdf') {
-      return await parsePdf(await file.arrayBuffer());
+      return excludeIgnored(await parsePdf(await file.arrayBuffer()));
     }
     const text = await readFileText(file);
-    return parseTextContent(text, extension);
+    return excludeIgnored(parseTextContent(text, extension));
   } catch (error) {
     if (error instanceof FileParseError) throw error;
     // Envolve erros inesperados (ex.: PDF protegido) em mensagem amigável.
