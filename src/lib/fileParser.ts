@@ -554,10 +554,10 @@ const getExtension = (fileName: string): string =>
 
 /**
  * Lançamentos automáticos que NÃO representam receita/despesa reais e que
- * devem ser ignorados em qualquer formato (ex.: aplicação/resgate automático
- * "BB Rende Fácil"). Filtra pela descrição.
+ * devem ser ignorados em qualquer formato (aplicações/resgates automáticos:
+ * "BB Rende Fácil", "Resgate Poupança"). Filtra pela descrição.
  */
-const IGNORED_DESCRIPTION = /rende\s*f[aá]cil/i;
+const IGNORED_DESCRIPTION = /rende\s*f[aá]cil|resgate\s*poupan[çc]a/i;
 
 const excludeIgnored = (
   transactions: ParsedTransaction[]

@@ -12,13 +12,34 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { Sidebar, type NavItem } from './Sidebar';
 
+const COLLAPSE_KEY = 'finfam:sidebar-collapsed';
+
 /**
  * Layout principal da aplicação autenticada.
- * Sidebar fixa (desktop) + drawer (mobile), com a área de conteúdo em #F2F2F2.
+ * Sidebar fixa e "sanfonável" (recolhível) no desktop + drawer no mobile,
+ * com a área de conteúdo em #F2F2F2.
  */
 export function MainLayout() {
   const { isAdmin } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () =>
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+      } catch {
+        /* ignora indisponibilidade do storage */
+      }
+      return next;
+    });
 
   const items: NavItem[] = [
     { label: 'Visão geral', to: '/', icon: LayoutDashboard },
@@ -31,11 +52,20 @@ export function MainLayout() {
       : []),
   ];
 
+  const asideWidth = collapsed ? 'w-[4.5rem]' : 'w-64';
+  const contentPad = collapsed ? 'md:pl-[4.5rem]' : 'md:pl-64';
+
   return (
     <div className="min-h-screen bg-brand-light">
-      {/* Sidebar fixa (desktop) — o #6D7368 aparece nos detalhes/ícones/textos */}
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-brand-moss/15 md:block">
-        <Sidebar items={items} />
+      {/* Sidebar fixa (desktop) */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden border-r border-brand-moss/15 transition-[width] duration-200 md:block ${asideWidth}`}
+      >
+        <Sidebar
+          items={items}
+          collapsed={collapsed}
+          onToggleCollapse={toggleCollapse}
+        />
       </aside>
 
       {/* Drawer (mobile) */}
@@ -61,9 +91,9 @@ export function MainLayout() {
       )}
 
       {/* Área de conteúdo */}
-      <div className="md:pl-64">
+      <div className={`transition-[padding] duration-200 ${contentPad}`}>
         {/* Top bar (apenas mobile) */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-brand-moss/15 bg-white/80 px-4 py-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-brand-moss/15 bg-white/80 px-4 py-3 backdrop-blur md:hidden">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}

@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-import { formatCurrency } from '../../lib/format';
+import { formatCurrencyAccounting } from '../../lib/format';
 
 export type KpiAccent = 'income' | 'expense' | 'balance';
 
@@ -13,15 +13,15 @@ interface KpiCardProps {
 }
 
 const valueColor = (accent: KpiAccent, value: number): string => {
-  if (accent === 'income') return 'text-brand-aqua';
-  if (accent === 'expense') return 'text-brand-moss';
-  return value >= 0 ? 'text-brand-aqua' : 'text-red-500';
+  if (accent === 'income') return 'text-brand-income';
+  if (accent === 'expense') return 'text-brand-expense';
+  return value >= 0 ? 'text-brand-income' : 'text-brand-expense';
 };
 
 const chipColor: Record<KpiAccent, string> = {
-  income: 'bg-brand-aqua/20 text-brand-moss',
-  expense: 'bg-brand-moss/15 text-brand-moss',
-  balance: 'bg-brand-aqua/20 text-brand-moss',
+  income: 'bg-brand-income/15 text-brand-income',
+  expense: 'bg-brand-expense/15 text-brand-expense',
+  balance: 'bg-brand-aqua/25 text-brand-moss',
 };
 
 /** Cartão de indicador (KPI) com bastante respiro e sombra suave. */
@@ -37,7 +37,7 @@ export function KpiCard({ label, value, icon: Icon, accent, hint }: KpiCardProps
         </span>
       </div>
       <p className={`mt-4 text-2xl font-bold tracking-tight sm:text-3xl ${valueColor(accent, value)}`}>
-        {formatCurrency(value)}
+        {formatCurrencyAccounting(value)}
       </p>
       {hint && <p className="mt-1 text-xs text-brand-gray">{hint}</p>}
     </div>

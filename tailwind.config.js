@@ -20,6 +20,9 @@ export default {
           cream: '#F1F2CE',
           // Cinza Muito Claro — Background principal
           light: '#F2F2F2',
+          // Semânticos: entradas (verde) e saídas (vermelho)
+          income: '#15966B',
+          expense: '#D64550',
         },
       },
       fontFamily: {

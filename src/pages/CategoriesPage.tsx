@@ -314,7 +314,7 @@ function CategoryColumn({
       <div className="mb-2 flex items-center gap-2">
         <span
           className={`h-2.5 w-2.5 rounded-full ${
-            kind === 'income' ? 'bg-brand-aqua' : 'bg-brand-moss'
+            kind === 'income' ? 'bg-brand-income' : 'bg-brand-expense'
           }`}
         />
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>

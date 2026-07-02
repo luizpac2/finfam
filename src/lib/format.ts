@@ -28,6 +28,19 @@ export const formatCurrency = (value: number): string =>
 export const formatCurrencyShort = (value: number): string =>
   compactCurrencyFormatter.format(value ?? 0);
 
+const accountingCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  currencySign: 'accounting', // negativos entre parênteses: (R$ 1.234,56)
+});
+
+/**
+ * Formata no padrão contábil: valores negativos aparecem entre parênteses,
+ * ex.: `(R$ 1.234,56)`. Use com valores já sinalizados (despesa = negativa).
+ */
+export const formatCurrencyAccounting = (value: number): string =>
+  accountingCurrencyFormatter.format(value ?? 0);
+
 /** Formata uma data ISO (YYYY-MM-DD) como DD/MM/AAAA. */
 export const formatDate = (isoDate: string): string => {
   if (!isoDate) return '';

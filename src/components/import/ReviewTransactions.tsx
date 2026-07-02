@@ -7,7 +7,7 @@ import {
   type Category,
 } from '../../domain/entities/Category';
 import type { TransactionType } from '../../lib/database.types';
-import { formatCurrency } from '../../lib/format';
+import { formatCurrencyAccounting } from '../../lib/format';
 import { CategoryIcon } from '../../lib/categoryIcons';
 
 /** Linha em revisão: transação importada + categoria escolhida (id ou ''). */
@@ -80,9 +80,13 @@ export function ReviewTransactions({
             · {stats.categorized}/{rows.length} categorizadas
           </span>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-brand-aqua">+ {formatCurrency(stats.income)}</span>
-          <span className="text-brand-moss">− {formatCurrency(stats.expense)}</span>
+        <div className="flex items-center gap-4 text-sm font-medium">
+          <span className="text-brand-income">
+            {formatCurrencyAccounting(stats.income)}
+          </span>
+          <span className="text-brand-expense">
+            {formatCurrencyAccounting(-stats.expense)}
+          </span>
         </div>
       </div>
 
@@ -143,8 +147,8 @@ export function ReviewTransactions({
                         }
                         className={`${inputClass} ${
                           row.type === 'income'
-                            ? 'text-brand-aqua'
-                            : 'text-brand-moss'
+                            ? 'text-brand-income'
+                            : 'text-brand-expense'
                         }`}
                         aria-label="Tipo"
                       >
@@ -197,8 +201,8 @@ export function ReviewTransactions({
                         }
                         className={`${inputClass} text-right font-medium ${
                           row.type === 'income'
-                            ? 'text-brand-aqua'
-                            : 'text-brand-moss'
+                            ? 'text-brand-income'
+                            : 'text-brand-expense'
                         }`}
                         aria-label="Valor"
                       />

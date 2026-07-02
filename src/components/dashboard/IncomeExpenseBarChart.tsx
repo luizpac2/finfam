@@ -57,8 +57,8 @@ export function IncomeExpenseBarChart({ data }: { data: MonthlyPoint[] }) {
             formatter={(value) => SERIES_LABELS[String(value)] ?? value}
             wrapperStyle={{ fontSize: 12, color: '#6D7368', paddingTop: 8 }}
           />
-          <Bar dataKey="income" fill="#9BBFB5" radius={[6, 6, 0, 0]} maxBarSize={26} />
-          <Bar dataKey="expense" fill="#6D7368" radius={[6, 6, 0, 0]} maxBarSize={26} />
+          <Bar dataKey="income" fill="#15966B" radius={[6, 6, 0, 0]} maxBarSize={26} />
+          <Bar dataKey="expense" fill="#D64550" radius={[6, 6, 0, 0]} maxBarSize={26} />
         </BarChart>
       </ResponsiveContainer>
     </div>

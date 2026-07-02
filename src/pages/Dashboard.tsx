@@ -139,7 +139,7 @@ export default function Dashboard() {
             />
             <KpiCard
               label="Despesas do mês"
-              value={monthSummary.expense}
+              value={-monthSummary.expense}
               icon={TrendingDown}
               accent="expense"
             />
