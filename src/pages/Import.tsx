@@ -112,8 +112,8 @@ export default function Import() {
           Importar extrato
         </h1>
         <p className="mt-1 text-sm text-brand-gray">
-          Envie um extrato (OFX, OFC ou PDF). As transações são categorizadas
-          automaticamente e você revisa antes de salvar.
+          Envie um extrato (OFX, OFC, CSV, TXT ou PDF). As transações são
+          categorizadas automaticamente e você revisa antes de salvar.
         </p>
       </header>
 

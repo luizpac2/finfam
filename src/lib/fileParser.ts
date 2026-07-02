@@ -2,7 +2,9 @@
  * Parser de extratos bancários — o "motor" da importação automática.
  *
  * Formatos suportados:
- *   - OFX / OFC : parsing das tags <TRNTYPE>, <DTPOSTED>, <TRNAMT>, <MEMO>.
+ *   - OFX / OFC : tags <TRNTYPE>, <DTPOSTED>, <TRNAMT>, <MEMO> (tolerante a SGML).
+ *   - CSV       : detecção de delimitador + colunas (data, descrição, valor…).
+ *   - TXT       : sniff — trata como OFX, CSV ou texto genérico conforme conteúdo.
  *   - PDF       : extração de texto via pdf.js + heurística de linhas.
  *
  * Toda função retorna SEMPRE o formato padronizado `ParsedTransaction[]`,
@@ -39,14 +41,14 @@ export class FileParseError extends Error {
 export class UnsupportedFormatError extends FileParseError {
   constructor(extension: string) {
     super(
-      `Formato não suportado: ".${extension}". Envie um arquivo OFX, OFC ou PDF.`
+      `Formato não suportado: ".${extension}". Envie OFX, OFC, CSV, TXT ou PDF.`
     );
     this.name = 'UnsupportedFormatError';
   }
 }
 
 // -----------------------------------------------------------------------------
-// Utilitários numéricos / de data compartilhados
+// Utilitários compartilhados (número, data, texto, leitura de arquivo)
 // -----------------------------------------------------------------------------
 
 /**
@@ -55,7 +57,7 @@ export class UnsupportedFormatError extends FileParseError {
  * Preserva o sinal.
  */
 export const parseAmount = (raw: string): number => {
-  const cleaned = raw.replace(/[^\d,.-]/g, '').trim();
+  const cleaned = (raw ?? '').replace(/[^\d,.-]/g, '').trim();
   if (!cleaned) return NaN;
 
   const hasComma = cleaned.includes(',');
@@ -75,6 +77,27 @@ export const parseAmount = (raw: string): number => {
   return Number.parseFloat(normalized);
 };
 
+/** Aceita datas ISO (YYYY-MM-DD) e brasileiras (DD/MM/AAAA, DD-MM-AA). */
+export const parseFlexibleDate = (raw: string): string => {
+  const s = (raw ?? '').trim();
+  let m = s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/); // ISO
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/); // dd/mm/aaaa
+  if (m) {
+    const year = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  return '';
+};
+
+/** Normaliza texto para comparação: sem acento, maiúsculas. */
+const normalize = (value: string): string =>
+  (value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .trim();
+
 /** Determina o tipo a partir do sinal do valor, com fallback no TRNTYPE. */
 const resolveType = (amount: number, trnType?: string): TransactionType => {
   if (amount > 0) return 'income';
@@ -83,13 +106,35 @@ const resolveType = (amount: number, trnType?: string): TransactionType => {
   return trnType && credit.test(trnType) ? 'income' : 'expense';
 };
 
+/**
+ * Lê o arquivo como texto tratando a codificação. Muitos bancos brasileiros
+ * exportam em Windows-1252/ISO-8859-1; se a decodificação UTF-8 gerar
+ * caracteres de substituição, tenta latin1 para não embaralhar os acentos.
+ */
+const readFileText = async (file: File): Promise<string> => {
+  const buffer = await file.arrayBuffer();
+  const utf8 = new TextDecoder('utf-8').decode(buffer);
+  if (utf8.includes('�')) {
+    try {
+      return new TextDecoder('windows-1252').decode(buffer);
+    } catch {
+      return utf8;
+    }
+  }
+  return utf8;
+};
+
 // =============================================================================
 // OFX / OFC
 // =============================================================================
 
-/** Extrai o valor de uma tag SGML/OFX (que pode vir sem fechamento). */
+/**
+ * Extrai o valor de uma tag SGML/OFX (que pode vir sem fechamento).
+ * Tolerante a espaços/quebra de linha após a tag (ex.: valor na linha seguinte)
+ * — lê tudo até o próximo `<`.
+ */
 const readTag = (block: string, tag: string): string => {
-  const match = block.match(new RegExp(`<${tag}>([^<\r\n]*)`, 'i'));
+  const match = block.match(new RegExp(`<${tag}>\\s*([^<]*)`, 'i'));
   return match ? match[1].trim() : '';
 };
 
@@ -122,19 +167,222 @@ const parseOfxTransaction = (block: string): ParsedTransaction | null => {
 
 /**
  * Faz o parsing de um conteúdo OFX/OFC. Cada lançamento vive em um bloco
- * `<STMTTRN>...`. Lança `FileParseError` se nenhum lançamento for encontrado.
+ * `<STMTTRN>...`. Lança `FileParseError` com diagnóstico específico.
  */
 export const parseOfx = (content: string): ParsedTransaction[] => {
   const blocks = content.split(/<STMTTRN>/i).slice(1);
+  if (blocks.length === 0) {
+    throw new FileParseError(
+      'Não encontramos lançamentos (blocos <STMTTRN>) neste arquivo OFX/OFC.'
+    );
+  }
+
   const transactions = blocks
     .map(parseOfxTransaction)
     .filter((tx): tx is ParsedTransaction => tx !== null);
 
   if (transactions.length === 0) {
     throw new FileParseError(
-      'Não encontramos lançamentos neste arquivo OFX/OFC. Ele pode estar vazio ou corrompido.'
+      `Encontramos ${blocks.length} lançamento(s) no OFX, mas não conseguimos ler ` +
+        'data/valor deles. Envie uma amostra do arquivo para ajustarmos o leitor.'
     );
   }
+  return transactions;
+};
+
+// =============================================================================
+// CSV
+// =============================================================================
+
+const CSV_DELIMITERS = [';', ',', '\t', '|'];
+
+const detectDelimiter = (lines: string[]): string => {
+  let best = ';';
+  let bestScore = -1;
+  for (const delim of CSV_DELIMITERS) {
+    const counts = lines.map((l) => l.split(delim).length);
+    const max = Math.max(...counts);
+    if (max <= 1) continue;
+    const consistent = counts.filter((c) => c === max).length;
+    const score = max + consistent;
+    if (score > bestScore) {
+      bestScore = score;
+      best = delim;
+    }
+  }
+  return best;
+};
+
+/** Divide uma linha CSV respeitando aspas duplas. */
+const splitCsvLine = (line: string, delim: string): string[] => {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (ch === delim && !quoted) {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map((c) => c.trim());
+};
+
+const looksLikeCsv = (text: string): boolean => {
+  const lines = text
+    .split(/\r?\n/)
+    .filter((l) => l.trim() !== '')
+    .slice(0, 8);
+  if (lines.length < 2) return false;
+  return CSV_DELIMITERS.some((d) => lines.every((l) => l.split(d).length >= 2));
+};
+
+/**
+ * Faz o parsing de um CSV de extrato. Detecta o delimitador e localiza as
+ * colunas por nome no cabeçalho (data, descrição, valor OU crédito/débito).
+ */
+export const parseCsv = (text: string): ParsedTransaction[] => {
+  const rows = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+  if (rows.length === 0) throw new FileParseError('O arquivo CSV está vazio.');
+
+  const delimiter = detectDelimiter(rows.slice(0, 8));
+
+  const isHeaderRow = (cells: string[]): boolean => {
+    const norm = cells.map(normalize);
+    const hasDate = norm.some((c) => /DATA|DATE/.test(c));
+    const hasValue = norm.some((c) =>
+      /VALOR|AMOUNT|MONTANTE|VALUE|VLR|CREDITO|CREDIT|DEBITO|DEBIT/.test(c)
+    );
+    return hasDate && hasValue;
+  };
+
+  const headerIndex = rows.findIndex((l) =>
+    isHeaderRow(splitCsvLine(l, delimiter))
+  );
+  if (headerIndex === -1) {
+    throw new FileParseError(
+      'Não reconhecemos as colunas do CSV. É preciso pelo menos uma coluna de ' +
+        'data e uma de valor (ex.: "Data" e "Valor").'
+    );
+  }
+
+  const header = splitCsvLine(rows[headerIndex], delimiter).map(normalize);
+  const col = (re: RegExp) => header.findIndex((h) => re.test(h));
+  const dateCol = col(/DATA|DATE/);
+  const descCol = col(/DESCRI|HISTOR|LANCAMENTO|MEMO|DETALHE|TRANSA|OBSERV/);
+  const amountCol = col(/VALOR|AMOUNT|MONTANTE|VALUE|VLR/);
+  const creditCol = col(/CREDITO|CREDIT|ENTRADA/);
+  const debitCol = col(/DEBITO|DEBIT|SAIDA/);
+  const typeCol = col(/TIPO|TYPE|NATUREZA/);
+
+  const transactions: ParsedTransaction[] = [];
+  for (const line of rows.slice(headerIndex + 1)) {
+    const cells = splitCsvLine(line, delimiter);
+    const date = parseFlexibleDate(cells[dateCol] ?? '');
+    if (!date) continue;
+
+    let amount = NaN;
+    let type: TransactionType = 'expense';
+
+    if (amountCol >= 0 && cells[amountCol]) {
+      amount = parseAmount(cells[amountCol]);
+      type = amount < 0 ? 'expense' : 'income';
+    } else if (creditCol >= 0 || debitCol >= 0) {
+      const credit = creditCol >= 0 ? parseAmount(cells[creditCol] ?? '') : NaN;
+      const debit = debitCol >= 0 ? parseAmount(cells[debitCol] ?? '') : NaN;
+      if (!Number.isNaN(credit) && Math.abs(credit) > 0) {
+        amount = credit;
+        type = 'income';
+      } else if (!Number.isNaN(debit) && Math.abs(debit) > 0) {
+        amount = debit;
+        type = 'expense';
+      }
+    }
+
+    // Uma coluna de tipo (D/C, débito/crédito) sobrepõe o sinal.
+    if (typeCol >= 0 && cells[typeCol]) {
+      const t = normalize(cells[typeCol]);
+      if (/^D|DEBIT|SAIDA|DESPESA/.test(t)) type = 'expense';
+      else if (/^C|CREDIT|ENTRADA|RECEITA/.test(t)) type = 'income';
+    }
+
+    if (Number.isNaN(amount) || amount === 0) continue;
+
+    const description = (descCol >= 0 ? cells[descCol] : '') || 'Lançamento';
+    transactions.push({
+      date,
+      description: description.replace(/\s+/g, ' ').trim(),
+      amount: Math.abs(amount),
+      type,
+    });
+  }
+
+  if (transactions.length === 0) {
+    throw new FileParseError(
+      'Lemos o CSV, mas não encontramos lançamentos válidos (data + valor).'
+    );
+  }
+  return transactions;
+};
+
+// =============================================================================
+// Texto genérico (usado por PDF e TXT sem estrutura)
+// =============================================================================
+
+// Heurística para extratos brasileiros: data dd/mm/aaaa + valor 1.234,56.
+const TEXT_DATE = /(\d{2}\/\d{2}\/\d{2,4})/;
+const TEXT_AMOUNT = /-?\s?R?\$?\s?\d{1,3}(?:\.\d{3})*,\d{2}/g;
+
+/**
+ * Converte texto bruto de extrato em lançamentos padronizados.
+ * Heurística genérica (best-effort): cada linha com data + valor vira um
+ * lançamento. Layouts variam muito entre bancos — OFX/OFC/CSV são mais confiáveis.
+ */
+export const parseStatementText = (text: string): ParsedTransaction[] => {
+  const transactions: ParsedTransaction[] = [];
+
+  for (const line of text.split('\n')) {
+    const dateMatch = line.match(TEXT_DATE);
+    if (!dateMatch) continue;
+
+    const amounts = line.match(TEXT_AMOUNT);
+    if (!amounts || amounts.length === 0) continue;
+
+    const rawAmount = amounts[0]; // 1º valor = lançamento (2º costuma ser saldo)
+    const amount = parseAmount(rawAmount);
+    if (Number.isNaN(amount) || amount === 0) continue;
+
+    const date = parseFlexibleDate(dateMatch[1]);
+    if (!date) continue;
+
+    const description = line
+      .replace(dateMatch[1], '')
+      .replace(rawAmount, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const isDebit = /(^|\s)D(\s|$)/.test(line) || rawAmount.includes('-');
+    const isCredit = /(^|\s)C(\s|$)/.test(line);
+    const type: TransactionType = isCredit && !isDebit ? 'income' : 'expense';
+
+    transactions.push({
+      date,
+      description: description || 'Lançamento',
+      amount: Math.abs(amount),
+      type: amount < 0 ? 'expense' : type,
+    });
+  }
+
   return transactions;
 };
 
@@ -142,8 +390,7 @@ export const parseOfx = (content: string): ParsedTransaction[] => {
 // PDF (pdf.js)
 // =============================================================================
 
-// Importação dinâmica: o pdf.js (pesado) só é carregado quando há um PDF,
-// mantendo o parsing de OFX/OFC leve.
+// Importação dinâmica: o pdf.js (pesado) só é carregado quando há um PDF.
 let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
 
 const getPdfjs = async (): Promise<typeof import('pdfjs-dist')> => {
@@ -162,8 +409,7 @@ const getPdfjs = async (): Promise<typeof import('pdfjs-dist')> => {
 
 /**
  * Extrai o texto bruto de um PDF de forma assíncrona, reconstruindo as linhas
- * a partir da posição vertical de cada fragmento de texto (pdf.js entrega os
- * itens sem quebras de linha).
+ * a partir da posição vertical de cada fragmento de texto.
  */
 export const extractPdfText = async (data: ArrayBuffer): Promise<string> => {
   const pdfjs = await getPdfjs();
@@ -176,7 +422,6 @@ export const extractPdfText = async (data: ArrayBuffer): Promise<string> => {
       const page = await doc.getPage(pageNum);
       const content = await page.getTextContent();
 
-      // Agrupa os fragmentos por linha (coordenada Y arredondada).
       const lines = new Map<number, { x: number; text: string }[]>();
       for (const item of content.items) {
         if (!('str' in item) || item.str.trim() === '') continue;
@@ -187,7 +432,6 @@ export const extractPdfText = async (data: ArrayBuffer): Promise<string> => {
         lines.set(y, line);
       }
 
-      // Y maior = mais ao topo da página; ordena de cima para baixo.
       const ordered = [...lines.entries()].sort((a, b) => b[0] - a[0]);
       for (const [, fragments] of ordered) {
         const text = fragments
@@ -204,62 +448,6 @@ export const extractPdfText = async (data: ArrayBuffer): Promise<string> => {
   return pages.join('\n');
 };
 
-// Heurística para extratos brasileiros: data dd/mm/aaaa + valor 1.234,56.
-const PDF_DATE = /(\d{2}\/\d{2}\/\d{2,4})/;
-const PDF_AMOUNT = /-?\s?R?\$?\s?\d{1,3}(?:\.\d{3})*,\d{2}/g;
-
-const toIsoDate = (br: string): string => {
-  const [d, m, yRaw] = br.split('/');
-  const y = yRaw.length === 2 ? `20${yRaw}` : yRaw;
-  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-};
-
-/**
- * Converte o texto bruto de um extrato em lançamentos padronizados.
- *
- * Heurística genérica (best-effort): cada linha com uma data + um valor vira
- * um lançamento. O sinal (`-` ou marcação `D`/`C`) define receita/despesa.
- * Layouts de PDF variam muito entre bancos — ajuste este parser conforme o
- * banco alvo. O caminho OFX/OFC é sempre mais confiável.
- */
-export const parseStatementText = (text: string): ParsedTransaction[] => {
-  const transactions: ParsedTransaction[] = [];
-
-  for (const line of text.split('\n')) {
-    const dateMatch = line.match(PDF_DATE);
-    if (!dateMatch) continue;
-
-    const amounts = line.match(PDF_AMOUNT);
-    if (!amounts || amounts.length === 0) continue;
-
-    // 1º valor da linha = lançamento (o 2º costuma ser o saldo).
-    const rawAmount = amounts[0];
-    const amount = parseAmount(rawAmount);
-    if (Number.isNaN(amount) || amount === 0) continue;
-
-    const date = toIsoDate(dateMatch[1]);
-    const description = line
-      .replace(dateMatch[1], '')
-      .replace(rawAmount, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Marcação de débito/crédito comum em extratos brasileiros.
-    const isDebit = /(^|\s)D(\s|$)/.test(line) || rawAmount.includes('-');
-    const isCredit = /(^|\s)C(\s|$)/.test(line);
-    const type: TransactionType = isCredit && !isDebit ? 'income' : 'expense';
-
-    transactions.push({
-      date,
-      description: description || 'Lançamento',
-      amount: Math.abs(amount),
-      type: amount < 0 ? 'expense' : type,
-    });
-  }
-
-  return transactions;
-};
-
 /** Lê um PDF e retorna os lançamentos padronizados. */
 export const parsePdf = async (
   data: ArrayBuffer
@@ -270,7 +458,7 @@ export const parsePdf = async (
   if (transactions.length === 0) {
     throw new FileParseError(
       'Lemos o PDF, mas não identificamos lançamentos automaticamente. ' +
-        'Tente exportar o extrato no formato OFX/OFC para um resultado preciso.'
+        'Tente exportar o extrato no formato OFX/OFC ou CSV para um resultado preciso.'
     );
   }
   return transactions;
@@ -283,10 +471,40 @@ export const parsePdf = async (
 const getExtension = (fileName: string): string =>
   fileName.split('.').pop()?.toLowerCase() ?? '';
 
+/** Roteia o conteúdo textual para o parser certo (com sniff de OFX/CSV). */
+const parseTextContent = (text: string, ext: string): ParsedTransaction[] => {
+  // Sniff pelo conteúdo: se parece OFX, usa o parser OFX mesmo se a extensão
+  // for .txt (bancos às vezes entregam OFX com outra extensão).
+  if (/<OFX[>\s]|<STMTTRN[>\s]/i.test(text)) return parseOfx(text);
+
+  switch (ext) {
+    case 'ofx':
+    case 'ofc':
+      return parseOfx(text);
+    case 'csv':
+      return parseCsv(text);
+    case 'txt': {
+      const result = looksLikeCsv(text)
+        ? parseCsv(text)
+        : parseStatementText(text);
+      if (result.length === 0) {
+        throw new FileParseError(
+          'Não identificamos lançamentos no arquivo .txt. Se for um extrato, ' +
+            'prefira exportar em OFX/OFC ou CSV.'
+        );
+      }
+      return result;
+    }
+    default:
+      if (looksLikeCsv(text)) return parseCsv(text);
+      throw new UnsupportedFormatError(ext || 'desconhecido');
+  }
+};
+
 /**
- * Ponto de entrada: detecta o formato pelo nome do arquivo e delega ao parser
- * adequado. Sempre resolve para `ParsedTransaction[]` ou lança um
- * `FileParseError`/`UnsupportedFormatError` com mensagem amigável.
+ * Ponto de entrada: detecta o formato e delega ao parser adequado. Sempre
+ * resolve para `ParsedTransaction[]` ou lança um `FileParseError`/
+ * `UnsupportedFormatError` com mensagem amigável.
  */
 export const parseStatementFile = async (
   file: File
@@ -294,15 +512,11 @@ export const parseStatementFile = async (
   const extension = getExtension(file.name);
 
   try {
-    switch (extension) {
-      case 'ofx':
-      case 'ofc':
-        return parseOfx(await file.text());
-      case 'pdf':
-        return parsePdf(await file.arrayBuffer());
-      default:
-        throw new UnsupportedFormatError(extension || 'desconhecido');
+    if (extension === 'pdf') {
+      return await parsePdf(await file.arrayBuffer());
     }
+    const text = await readFileText(file);
+    return parseTextContent(text, extension);
   } catch (error) {
     if (error instanceof FileParseError) throw error;
     // Envolve erros inesperados (ex.: PDF protegido) em mensagem amigável.

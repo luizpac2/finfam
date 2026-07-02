@@ -10,13 +10,15 @@ interface DragAndDropZoneProps {
   hint?: string;
 }
 
+const DEFAULT_ACCEPT = '.ofx,.ofc,.csv,.txt,.pdf';
+
 /**
  * Área de upload com arrastar-e-soltar.
  * Ao passar um arquivo por cima (hover/drag), o fundo fica #F1F2CE (brand-cream).
  */
 export function DragAndDropZone({
   onFileSelected,
-  accept = '.ofx,.ofc,.pdf',
+  accept = DEFAULT_ACCEPT,
   disabled = false,
   hint,
 }: DragAndDropZoneProps) {
@@ -81,7 +83,7 @@ export function DragAndDropZone({
           Arraste o extrato aqui
         </p>
         <p className="text-sm text-brand-gray">
-          ou clique para selecionar · OFX, OFC ou PDF
+          ou clique para selecionar · OFX, OFC, CSV, TXT ou PDF
         </p>
       </div>
       {hint && <p className="text-xs text-brand-gray">{hint}</p>}
