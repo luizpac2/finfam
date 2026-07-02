@@ -282,8 +282,11 @@ export const suggestCategoryId = (
   type: TransactionType,
   categories: Category[]
 ): string => {
+  // Só considera categorias do MESMO tipo (receita/despesa) da transação.
   const findByName = (name: string): Category | undefined =>
-    categories.find((c) => normalizeText(c.name) === normalizeText(name));
+    categories.find(
+      (c) => c.kind === type && normalizeText(c.name) === normalizeText(name)
+    );
 
   const suggested = suggestCategoryName(description, type);
   if (suggested) {

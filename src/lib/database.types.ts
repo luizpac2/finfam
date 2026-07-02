@@ -10,6 +10,7 @@ export type UserRole = 'admin' | 'member';
 export type UserStatus = 'invited' | 'active' | 'revoked';
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'pending' | 'paid' | 'cancelled';
+export type CategoryKind = 'income' | 'expense';
 
 export interface Database {
   public: {
@@ -20,6 +21,8 @@ export interface Database {
           name: string;
           icon: string | null;
           color: string | null;
+          kind: CategoryKind;
+          parent_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -28,6 +31,8 @@ export interface Database {
           name: string;
           icon?: string | null;
           color?: string | null;
+          kind?: CategoryKind;
+          parent_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -36,6 +41,8 @@ export interface Database {
           name?: string;
           icon?: string | null;
           color?: string | null;
+          kind?: CategoryKind;
+          parent_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -136,6 +143,7 @@ export interface Database {
       user_status: UserStatus;
       transaction_type: TransactionType;
       transaction_status: TransactionStatus;
+      category_kind: CategoryKind;
     };
     CompositeTypes: Record<string, never>;
   };

@@ -1,35 +1,46 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 import { useToast } from '../hooks/useToast';
 import { categoryService } from '../services';
-import type { Category, CategoryInput } from '../domain/entities/Category';
+import type { Category } from '../domain/entities/Category';
+import type { CategoryKind } from '../lib/database.types';
 import { Card } from '../components/ui/Card';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
+import { IconPicker } from '../components/ui/IconPicker';
+import { CategoryIcon } from '../lib/categoryIcons';
 
 const DEFAULT_COLOR = '#9BBFB5';
 
-const emptyForm: CategoryInput = { name: '', color: DEFAULT_COLOR, icon: '' };
+interface CategoryForm {
+  id: string | null;
+  name: string;
+  kind: CategoryKind;
+  parentId: string;
+  icon: string;
+  color: string;
+}
+
+const emptyForm: CategoryForm = {
+  id: null,
+  name: '',
+  kind: 'expense',
+  parentId: '',
+  icon: 'tag',
+  color: DEFAULT_COLOR,
+};
 
 const inputClass =
   'w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
 
-/**
- * Gestão de categorias (somente Admin, por RLS): criar, editar e excluir.
- */
+/** Gestão de categorias (somente Admin): tipo, subcategorias, ícone e cor. */
 export default function CategoriesPage() {
   const toast = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  // Formulário de criação
-  const [form, setForm] = useState<CategoryInput>(emptyForm);
-  const [creating, setCreating] = useState(false);
-
-  // Edição inline
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<CategoryInput>(emptyForm);
+  const [form, setForm] = useState<CategoryForm>(emptyForm);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     try {
@@ -46,58 +57,63 @@ export default function CategoriesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCreate = async (event: FormEvent) => {
+  // Categorias-raiz do tipo selecionado, candidatas a "pai" (exclui a própria).
+  const parentChoices = useMemo(
+    () =>
+      categories.filter(
+        (c) => !c.parentId && c.kind === form.kind && c.id !== form.id
+      ),
+    [categories, form.kind, form.id]
+  );
+
+  const resetForm = () => setForm(emptyForm);
+
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) return;
-    setCreating(true);
+    setSaving(true);
+    const parent = categories.find((c) => c.id === form.parentId) ?? null;
+    const payload = {
+      name: form.name.trim(),
+      icon: form.icon || null,
+      color: form.color,
+      kind: parent ? parent.kind : form.kind, // subcategoria herda o tipo do pai
+      parentId: form.parentId || null,
+    };
     try {
-      await categoryService.create({
-        name: form.name.trim(),
-        color: form.color,
-        icon: form.icon?.trim() || null,
-      });
-      setForm(emptyForm);
+      if (form.id) {
+        await categoryService.update(form.id, payload);
+        toast.success('Categoria atualizada.');
+      } else {
+        await categoryService.create(payload);
+        toast.success('Categoria criada.');
+      }
+      resetForm();
       await load();
-      toast.success('Categoria criada.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Não foi possível criar.');
+      toast.error(err instanceof Error ? err.message : 'Falha ao salvar.');
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
   const startEdit = (category: Category) => {
-    setEditingId(category.id);
-    setEditForm({
+    setForm({
+      id: category.id,
       name: category.name,
+      kind: category.kind,
+      parentId: category.parentId ?? '',
+      icon: category.icon ?? 'tag',
       color: category.color ?? DEFAULT_COLOR,
-      icon: category.icon ?? '',
     });
-  };
-
-  const saveEdit = async (id: string) => {
-    if (!editForm.name.trim()) return;
-    setBusyId(id);
-    try {
-      await categoryService.update(id, {
-        name: editForm.name.trim(),
-        color: editForm.color,
-        icon: editForm.icon?.trim() || null,
-      });
-      setEditingId(null);
-      await load();
-      toast.success('Categoria atualizada.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falha ao salvar.');
-    } finally {
-      setBusyId(null);
-    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const remove = async (category: Category) => {
     setBusyId(category.id);
     try {
       await categoryService.remove(category.id);
+      if (form.id === category.id) resetForm();
       await load();
       toast.success(`"${category.name}" excluída.`);
     } catch (err) {
@@ -110,203 +126,291 @@ export default function CategoriesPage() {
   if (loading) return <FullScreenLoader label="Carregando categorias…" />;
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-6">
       <header>
         <h1 className="text-xl font-bold tracking-tight text-brand-moss sm:text-2xl">
           Categorias
         </h1>
         <p className="mt-1 text-sm text-brand-gray">
-          Organize as categorias usadas na categorização e nos gráficos.
+          Separe por receita e despesa, crie subcategorias e escolha ícone e cor.
         </p>
       </header>
 
-      {/* Nova categoria */}
+      {/* Formulário (criar / editar) */}
       <Card>
-        <h2 className="mb-4 text-lg font-semibold text-brand-moss">
-          Nova categoria
+        <h2 className="mb-4 text-base font-semibold text-brand-moss">
+          {form.id ? 'Editar categoria' : 'Nova categoria'}
         </h2>
-        <form
-          onSubmit={handleCreate}
-          className="flex flex-col gap-3 sm:flex-row sm:items-end"
-        >
-          <label className="flex-1">
-            <span className="mb-1 block text-sm font-medium text-brand-moss">
-              Nome
-            </span>
-            <input
-              type="text"
-              required
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Ex.: Alimentação"
-              className={inputClass}
-            />
-          </label>
-          <label className="sm:w-40">
-            <span className="mb-1 block text-sm font-medium text-brand-moss">
-              Ícone (opcional)
-            </span>
-            <input
-              type="text"
-              value={form.icon ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-              placeholder="ex.: home"
-              className={inputClass}
-            />
-          </label>
-          <label>
-            <span className="mb-1 block text-sm font-medium text-brand-moss">
-              Cor
-            </span>
-            <input
-              type="color"
-              value={form.color ?? DEFAULT_COLOR}
-              onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
-              className="h-[38px] w-14 cursor-pointer rounded-lg border border-brand-moss/25 bg-white p-1"
-              aria-label="Cor"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={creating}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-aqua px-5 py-2 font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {creating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Adicionar
-          </button>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="lg:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Nome
+              </span>
+              <input
+                type="text"
+                required
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Ex.: Alimentação"
+                className={inputClass}
+              />
+            </label>
+
+            <div>
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Tipo
+              </span>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-brand-light p-1">
+                {(['income', 'expense'] as CategoryKind[]).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    disabled={Boolean(form.parentId)}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, kind: k, parentId: '' }))
+                    }
+                    className={`rounded-md py-1.5 text-sm font-medium transition disabled:opacity-60 ${
+                      (form.parentId
+                        ? parentChoices.find((c) => c.id === form.parentId)?.kind
+                        : form.kind) === k
+                        ? 'bg-white text-brand-moss shadow-sm'
+                        : 'text-brand-gray'
+                    }`}
+                  >
+                    {k === 'income' ? 'Receita' : 'Despesa'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label>
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Categoria pai
+              </span>
+              <select
+                value={form.parentId}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, parentId: e.target.value }))
+                }
+                className={inputClass}
+              >
+                <option value="">Nenhuma (principal)</option>
+                {parentChoices.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Ícone
+              </span>
+              <IconPicker
+                value={form.icon}
+                color={form.color}
+                onChange={(icon) => setForm((f) => ({ ...f, icon }))}
+              />
+            </div>
+            <label>
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Cor
+              </span>
+              <input
+                type="color"
+                value={form.color}
+                onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
+                className="h-[38px] w-14 cursor-pointer rounded-lg border border-brand-moss/25 bg-white p-1"
+                aria-label="Cor"
+              />
+            </label>
+
+            <div className="ml-auto flex items-center gap-2">
+              {form.id && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 rounded-lg border border-brand-moss/25 px-4 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : form.id ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                {form.id ? 'Salvar' : 'Adicionar'}
+              </button>
+            </div>
+          </div>
         </form>
       </Card>
 
-      {/* Lista */}
-      <h2 className="text-lg font-semibold text-brand-moss">
-        Todas as categorias ({categories.length})
-      </h2>
+      {/* Listas por tipo */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CategoryColumn
+          title="Receitas"
+          kind="income"
+          categories={categories}
+          busyId={busyId}
+          onEdit={startEdit}
+          onRemove={remove}
+        />
+        <CategoryColumn
+          title="Despesas"
+          kind="expense"
+          categories={categories}
+          busyId={busyId}
+          onEdit={startEdit}
+          onRemove={remove}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface ColumnProps {
+  title: string;
+  kind: CategoryKind;
+  categories: Category[];
+  busyId: string | null;
+  onEdit: (category: Category) => void;
+  onRemove: (category: Category) => void;
+}
+
+function CategoryColumn({
+  title,
+  kind,
+  categories,
+  busyId,
+  onEdit,
+  onRemove,
+}: ColumnProps) {
+  const scoped = categories.filter((c) => c.kind === kind);
+  const roots = scoped
+    .filter((c) => !c.parentId)
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const childrenOf = (id: string) =>
+    scoped
+      .filter((c) => c.parentId === id)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className={`h-2.5 w-2.5 rounded-full ${
+            kind === 'income' ? 'bg-brand-aqua' : 'bg-brand-moss'
+          }`}
+        />
+        <h2 className="text-base font-semibold text-brand-moss">{title}</h2>
+        <span className="text-sm text-brand-gray">({scoped.length})</span>
+      </div>
       <Card className="overflow-hidden p-0">
-        {categories.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-brand-gray">
-            Nenhuma categoria ainda. Crie a primeira acima.
+        {roots.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-brand-gray">
+            Nenhuma categoria de {title.toLowerCase()} ainda.
           </p>
         ) : (
           <ul className="divide-y divide-brand-moss/10">
-            {categories.map((category) => {
-              const editing = editingId === category.id;
-              const busy = busyId === category.id;
-              return (
-                <li
-                  key={category.id}
-                  className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  {editing ? (
-                    <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                      <input
-                        type="color"
-                        value={editForm.color ?? DEFAULT_COLOR}
-                        onChange={(e) =>
-                          setEditForm((f) => ({ ...f, color: e.target.value }))
-                        }
-                        className="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-brand-moss/25 bg-white p-1"
-                        aria-label="Cor"
-                      />
-                      <input
-                        type="text"
-                        value={editForm.name}
-                        onChange={(e) =>
-                          setEditForm((f) => ({ ...f, name: e.target.value }))
-                        }
-                        className={`${inputClass} sm:max-w-xs`}
-                        aria-label="Nome"
-                      />
-                      <input
-                        type="text"
-                        value={editForm.icon ?? ''}
-                        onChange={(e) =>
-                          setEditForm((f) => ({ ...f, icon: e.target.value }))
-                        }
-                        placeholder="ícone"
-                        className={`${inputClass} sm:max-w-[10rem]`}
-                        aria-label="Ícone"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="h-4 w-4 shrink-0 rounded-full ring-1 ring-brand-moss/10"
-                        style={{ backgroundColor: category.color ?? '#D8D8D8' }}
-                      />
-                      <span className="font-medium text-brand-moss">
-                        {category.name}
-                      </span>
-                      {category.icon && (
-                        <span className="rounded-full bg-brand-light px-2 py-0.5 text-xs text-brand-gray">
-                          {category.icon}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    {editing ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => saveEdit(category.id)}
-                          disabled={busy}
-                          className="inline-flex items-center gap-1 rounded-lg bg-brand-aqua px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:brightness-95 disabled:opacity-60"
-                        >
-                          {busy ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Check className="h-4 w-4" />
-                          )}
-                          Salvar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          disabled={busy}
-                          className="inline-flex items-center gap-1 rounded-lg border border-brand-moss/25 px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
-                        >
-                          <X className="h-4 w-4" />
-                          Cancelar
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => startEdit(category)}
-                          disabled={busy}
-                          className="inline-flex items-center gap-1 rounded-lg border border-brand-moss/25 px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => remove(category)}
-                          disabled={busy}
-                          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-gray transition hover:text-red-600 disabled:opacity-60"
-                        >
-                          {busy ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                          Excluir
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+            {roots.map((root) => (
+              <li key={root.id}>
+                <CategoryRow
+                  category={root}
+                  busy={busyId === root.id}
+                  onEdit={onEdit}
+                  onRemove={onRemove}
+                />
+                {childrenOf(root.id).map((child) => (
+                  <CategoryRow
+                    key={child.id}
+                    category={child}
+                    nested
+                    busy={busyId === child.id}
+                    onEdit={onEdit}
+                    onRemove={onRemove}
+                  />
+                ))}
+              </li>
+            ))}
           </ul>
         )}
       </Card>
+    </div>
+  );
+}
+
+interface RowProps {
+  category: Category;
+  nested?: boolean;
+  busy: boolean;
+  onEdit: (category: Category) => void;
+  onRemove: (category: Category) => void;
+}
+
+function CategoryRow({ category, nested, busy, onEdit, onRemove }: RowProps) {
+  return (
+    <div
+      className={`flex items-center justify-between px-4 py-2.5 ${
+        nested ? 'border-t border-brand-moss/5 bg-brand-light/40 pl-10' : ''
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+          style={{ backgroundColor: `${category.color ?? '#D8D8D8'}33` }}
+        >
+          <CategoryIcon
+            name={category.icon}
+            className="h-4 w-4"
+          />
+        </span>
+        <span className="truncate text-sm font-medium text-brand-moss">
+          {category.name}
+        </span>
+        <span
+          className="h-2 w-2 shrink-0 rounded-full ring-1 ring-brand-moss/10"
+          style={{ backgroundColor: category.color ?? '#D8D8D8' }}
+        />
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onEdit(category)}
+          disabled={busy}
+          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss disabled:opacity-50"
+          aria-label={`Editar ${category.name}`}
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(category)}
+          disabled={busy}
+          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-red-600 disabled:opacity-50"
+          aria-label={`Excluir ${category.name}`}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </button>
+      </div>
     </div>
   );
 }

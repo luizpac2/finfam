@@ -72,7 +72,13 @@ export default function Import() {
 
   const handleChangeRow = (index: number, patch: Partial<ReviewRow>) => {
     setRows((current) =>
-      current.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      current.map((row, i) => {
+        if (i !== index) return row;
+        const next = { ...row, ...patch };
+        // Categorias são específicas por tipo: ao mudar o tipo, limpa a categoria.
+        if (patch.type && patch.type !== row.type) next.categoryId = '';
+        return next;
+      })
     );
   };
 

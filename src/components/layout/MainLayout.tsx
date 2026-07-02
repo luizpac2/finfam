@@ -75,7 +75,7 @@ export function MainLayout() {
           <span className="text-base font-semibold text-brand-moss">FinFam</span>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+        <main className="mx-auto max-w-[1700px] px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
           <Outlet />
         </main>
       </div>

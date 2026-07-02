@@ -2,9 +2,13 @@ import { useMemo } from 'react';
 import { Loader2, Sparkles, Trash2, X } from 'lucide-react';
 
 import type { ParsedTransaction } from '../../lib/fileParser';
-import type { Category } from '../../domain/entities/Category';
+import {
+  buildCategoryOptions,
+  type Category,
+} from '../../domain/entities/Category';
 import type { TransactionType } from '../../lib/database.types';
 import { formatCurrency } from '../../lib/format';
+import { CategoryIcon } from '../../lib/categoryIcons';
 
 /** Linha em revisão: transação importada + categoria escolhida (id ou ''). */
 export interface ReviewRow extends ParsedTransaction {
@@ -26,8 +30,8 @@ const inputClass =
 
 /**
  * Tela de revisão (DataGrid) das transações importadas — totalmente editável.
- * Cada campo (data, descrição, tipo, valor, categoria) pode ser ajustado antes
- * de confirmar; linhas podem ser removidas.
+ * A categoria é filtrada pelo tipo da linha (receita/despesa) e mostra
+ * subcategorias indentadas.
  */
 export function ReviewTransactions({
   rows,
@@ -44,6 +48,14 @@ export function ReviewTransactions({
     return map;
   }, [categories]);
 
+  const optionsByKind = useMemo(
+    () => ({
+      income: buildCategoryOptions(categories, 'income'),
+      expense: buildCategoryOptions(categories, 'expense'),
+    }),
+    [categories]
+  );
+
   const stats = useMemo(() => {
     const categorized = rows.filter((row) => row.categoryId !== '').length;
     const totals = rows.reduce(
@@ -59,8 +71,8 @@ export function ReviewTransactions({
 
   return (
     <section className="rounded-2xl border border-brand-moss/10 bg-white shadow-card">
-      {/* Cabeçalho do grid */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-moss/10 px-4 py-4">
+      {/* Cabeçalho */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-moss/10 px-4 py-3">
         <div className="flex items-center gap-2 text-brand-moss">
           <Sparkles className="h-5 w-5 text-brand-aqua" strokeWidth={1.8} />
           <span className="font-semibold">Revisar e categorizar</span>
@@ -76,28 +88,27 @@ export function ReviewTransactions({
 
       {rows.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-brand-gray">
-          Nenhuma linha para importar. Você removeu todas — cancele para começar
-          de novo.
+          Nenhuma linha para importar. Cancele para começar de novo.
         </p>
       ) : (
-        <div className="max-h-[28rem] overflow-auto">
+        <div className="max-h-[calc(100vh-19rem)] overflow-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-brand-light text-xs uppercase tracking-wide text-brand-gray">
               <tr>
-                <th className="px-4 py-3 font-medium">Data</th>
-                <th className="px-4 py-3 font-medium">Descrição</th>
-                <th className="px-4 py-3 font-medium">Tipo</th>
-                <th className="px-4 py-3 font-medium">Categoria</th>
-                <th className="px-4 py-3 text-right font-medium">Valor</th>
-                <th className="px-4 py-3" />
+                <th className="px-3 py-2 font-medium">Data</th>
+                <th className="w-full px-3 py-2 font-medium">Descrição</th>
+                <th className="px-3 py-2 font-medium">Tipo</th>
+                <th className="px-3 py-2 font-medium">Categoria</th>
+                <th className="px-3 py-2 text-right font-medium">Valor</th>
+                <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-moss/10">
               {rows.map((row, index) => {
                 const selected = categoryById.get(row.categoryId);
                 return (
-                  <tr key={index} className="align-top hover:bg-brand-light/50">
-                    <td className="px-4 py-2">
+                  <tr key={index} className="hover:bg-brand-light/50">
+                    <td className="px-3 py-1.5">
                       <input
                         type="date"
                         value={row.date}
@@ -105,11 +116,11 @@ export function ReviewTransactions({
                         onChange={(e) =>
                           onChangeRow(index, { date: e.target.value })
                         }
-                        className={`${inputClass} min-w-[8.5rem]`}
+                        className={`${inputClass} w-[8.5rem]`}
                         aria-label="Data"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-1.5">
                       <input
                         type="text"
                         value={row.description}
@@ -117,11 +128,11 @@ export function ReviewTransactions({
                         onChange={(e) =>
                           onChangeRow(index, { description: e.target.value })
                         }
-                        className={`${inputClass} min-w-[12rem]`}
+                        className={`${inputClass} min-w-[16rem]`}
                         aria-label="Descrição"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-1.5">
                       <select
                         value={row.type}
                         disabled={submitting}
@@ -130,7 +141,7 @@ export function ReviewTransactions({
                             type: e.target.value as TransactionType,
                           })
                         }
-                        className={`${inputClass} min-w-[7rem] ${
+                        className={`${inputClass} w-[6.5rem] ${
                           row.type === 'income'
                             ? 'text-brand-aqua'
                             : 'text-brand-moss'
@@ -141,31 +152,38 @@ export function ReviewTransactions({
                         <option value="expense">Despesa</option>
                       </select>
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-1.5">
                         <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-brand-moss/10"
-                          style={{ backgroundColor: selected?.color ?? '#D8D8D8' }}
-                        />
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                          style={{
+                            backgroundColor: `${selected?.color ?? '#D8D8D8'}33`,
+                          }}
+                        >
+                          <CategoryIcon
+                            name={selected?.icon}
+                            className="h-3.5 w-3.5"
+                          />
+                        </span>
                         <select
                           value={row.categoryId}
                           disabled={submitting}
                           onChange={(e) =>
                             onChangeRow(index, { categoryId: e.target.value })
                           }
-                          className={`${inputClass} min-w-[10rem]`}
+                          className={`${inputClass} w-[11rem]`}
                           aria-label="Categoria"
                         >
                           <option value="">Sem categoria</option>
-                          {categories.map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
+                          {optionsByKind[row.type].map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label}
                             </option>
                           ))}
                         </select>
                       </div>
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-1.5">
                       <input
                         type="number"
                         step="0.01"
@@ -177,7 +195,7 @@ export function ReviewTransactions({
                             amount: Math.abs(Number(e.target.value)) || 0,
                           })
                         }
-                        className={`${inputClass} min-w-[7rem] text-right font-medium ${
+                        className={`${inputClass} w-[7rem] text-right font-medium ${
                           row.type === 'income'
                             ? 'text-brand-aqua'
                             : 'text-brand-moss'
@@ -185,7 +203,7 @@ export function ReviewTransactions({
                         aria-label="Valor"
                       />
                     </td>
-                    <td className="px-2 py-2 text-right">
+                    <td className="px-2 py-1.5 text-right">
                       <button
                         type="button"
                         onClick={() => onRemoveRow(index)}
@@ -206,7 +224,7 @@ export function ReviewTransactions({
       )}
 
       {/* Rodapé / ações */}
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-brand-moss/10 px-4 py-4">
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-brand-moss/10 px-4 py-3">
         <button
           type="button"
           onClick={onCancel}
@@ -223,9 +241,7 @@ export function ReviewTransactions({
           className="inline-flex items-center gap-2 rounded-xl bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          {submitting
-            ? 'Importando…'
-            : `Confirmar importação (${rows.length})`}
+          {submitting ? 'Importando…' : `Confirmar importação (${rows.length})`}
         </button>
       </div>
     </section>

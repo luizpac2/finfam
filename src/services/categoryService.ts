@@ -41,6 +41,8 @@ export const categoryService = {
           name: input.name,
           icon: input.icon ?? null,
           color: input.color ?? null,
+          kind: input.kind ?? 'expense',
+          parent_id: input.parentId ?? null,
         })
         .select()
         .single(),
