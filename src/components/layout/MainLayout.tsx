@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { LayoutDashboard, Upload, ShieldCheck, Menu, X } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Upload,
+  Tags,
+  ShieldCheck,
+  Menu,
+  X,
+} from 'lucide-react';
 
 import { useAuth } from '../../hooks/useAuth';
 import { Sidebar, type NavItem } from './Sidebar';
@@ -17,7 +24,10 @@ export function MainLayout() {
     { label: 'Visão geral', to: '/', icon: LayoutDashboard },
     { label: 'Importar', to: '/importar', icon: Upload },
     ...(isAdmin
-      ? [{ label: 'Administração', to: '/admin', icon: ShieldCheck }]
+      ? [
+          { label: 'Categorias', to: '/categorias', icon: Tags },
+          { label: 'Administração', to: '/admin', icon: ShieldCheck },
+        ]
       : []),
   ];
 

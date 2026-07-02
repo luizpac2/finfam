@@ -70,10 +70,14 @@ export default function Import() {
     }
   };
 
-  const handleChangeCategory = (index: number, categoryId: string) => {
+  const handleChangeRow = (index: number, patch: Partial<ReviewRow>) => {
     setRows((current) =>
-      current.map((row, i) => (i === index ? { ...row, categoryId } : row))
+      current.map((row, i) => (i === index ? { ...row, ...patch } : row))
     );
+  };
+
+  const handleRemoveRow = (index: number) => {
+    setRows((current) => current.filter((_, i) => i !== index));
   };
 
   const reset = () => {
@@ -128,7 +132,8 @@ export default function Import() {
           rows={rows}
           categories={categories}
           submitting={importing}
-          onChangeCategory={handleChangeCategory}
+          onChangeRow={handleChangeRow}
+          onRemoveRow={handleRemoveRow}
           onConfirm={handleConfirm}
           onCancel={reset}
         />

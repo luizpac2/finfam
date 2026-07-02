@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { Loader2, Sparkles, Trash2, X } from 'lucide-react';
 
 import type { ParsedTransaction } from '../../lib/fileParser';
 import type { Category } from '../../domain/entities/Category';
-import { formatCurrency, formatDate } from '../../lib/format';
-import { TransactionTypeLabel } from '../../domain/constants';
+import type { TransactionType } from '../../lib/database.types';
+import { formatCurrency } from '../../lib/format';
 
 /** Linha em revisão: transação importada + categoria escolhida (id ou ''). */
 export interface ReviewRow extends ParsedTransaction {
@@ -15,21 +15,26 @@ interface ReviewTransactionsProps {
   rows: ReviewRow[];
   categories: Category[];
   submitting: boolean;
-  onChangeCategory: (index: number, categoryId: string) => void;
+  onChangeRow: (index: number, patch: Partial<ReviewRow>) => void;
+  onRemoveRow: (index: number) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
+const inputClass =
+  'w-full rounded-lg border border-brand-moss/25 bg-white px-2 py-1.5 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
+
 /**
- * Tela de revisão (DataGrid) das transações importadas.
- * Mostra cada lançamento com a categoria pré-selecionada pela heurística,
- * permitindo ajustar via dropdown antes de confirmar a importação.
+ * Tela de revisão (DataGrid) das transações importadas — totalmente editável.
+ * Cada campo (data, descrição, tipo, valor, categoria) pode ser ajustado antes
+ * de confirmar; linhas podem ser removidas.
  */
 export function ReviewTransactions({
   rows,
   categories,
   submitting,
-  onChangeCategory,
+  onChangeRow,
+  onRemoveRow,
   onConfirm,
   onCancel,
 }: ReviewTransactionsProps) {
@@ -69,80 +74,136 @@ export function ReviewTransactions({
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="max-h-[28rem] overflow-auto">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-brand-light text-xs uppercase tracking-wide text-brand-gray">
-            <tr>
-              <th className="px-4 py-3 font-medium">Data</th>
-              <th className="px-4 py-3 font-medium">Descrição</th>
-              <th className="px-4 py-3 font-medium">Tipo</th>
-              <th className="px-4 py-3 font-medium">Categoria</th>
-              <th className="px-4 py-3 text-right font-medium">Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-brand-moss/10">
-            {rows.map((row, index) => {
-              const selected = categoryById.get(row.categoryId);
-              return (
-                <tr
-                  key={`${row.date}-${index}`}
-                  className="text-brand-moss transition hover:bg-brand-light/60"
-                >
-                  <td className="whitespace-nowrap px-4 py-3 text-brand-gray">
-                    {formatDate(row.date)}
-                  </td>
-                  <td className="max-w-[18rem] truncate px-4 py-3" title={row.description}>
-                    {row.description}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        row.type === 'income'
-                          ? 'bg-brand-aqua/20 text-brand-moss'
-                          : 'bg-brand-moss/10 text-brand-moss'
-                      }`}
-                    >
-                      {TransactionTypeLabel[row.type]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-brand-moss/10"
-                        style={{ backgroundColor: selected?.color ?? '#D8D8D8' }}
-                      />
-                      <select
-                        value={row.categoryId}
+      {rows.length === 0 ? (
+        <p className="px-4 py-10 text-center text-sm text-brand-gray">
+          Nenhuma linha para importar. Você removeu todas — cancele para começar
+          de novo.
+        </p>
+      ) : (
+        <div className="max-h-[28rem] overflow-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-brand-light text-xs uppercase tracking-wide text-brand-gray">
+              <tr>
+                <th className="px-4 py-3 font-medium">Data</th>
+                <th className="px-4 py-3 font-medium">Descrição</th>
+                <th className="px-4 py-3 font-medium">Tipo</th>
+                <th className="px-4 py-3 font-medium">Categoria</th>
+                <th className="px-4 py-3 text-right font-medium">Valor</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-brand-moss/10">
+              {rows.map((row, index) => {
+                const selected = categoryById.get(row.categoryId);
+                return (
+                  <tr key={index} className="align-top hover:bg-brand-light/50">
+                    <td className="px-4 py-2">
+                      <input
+                        type="date"
+                        value={row.date}
                         disabled={submitting}
-                        onChange={(event) =>
-                          onChangeCategory(index, event.target.value)
+                        onChange={(e) =>
+                          onChangeRow(index, { date: e.target.value })
                         }
-                        className="max-w-[12rem] rounded-lg border border-brand-moss/25 bg-white px-2 py-1.5 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30 disabled:opacity-60"
-                        aria-label={`Categoria de ${row.description}`}
+                        className={`${inputClass} min-w-[8.5rem]`}
+                        aria-label="Data"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        value={row.description}
+                        disabled={submitting}
+                        onChange={(e) =>
+                          onChangeRow(index, { description: e.target.value })
+                        }
+                        className={`${inputClass} min-w-[12rem]`}
+                        aria-label="Descrição"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={row.type}
+                        disabled={submitting}
+                        onChange={(e) =>
+                          onChangeRow(index, {
+                            type: e.target.value as TransactionType,
+                          })
+                        }
+                        className={`${inputClass} min-w-[7rem] ${
+                          row.type === 'income'
+                            ? 'text-brand-aqua'
+                            : 'text-brand-moss'
+                        }`}
+                        aria-label="Tipo"
                       >
-                        <option value="">Sem categoria</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
+                        <option value="income">Receita</option>
+                        <option value="expense">Despesa</option>
                       </select>
-                    </div>
-                  </td>
-                  <td
-                    className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${
-                      row.type === 'income' ? 'text-brand-aqua' : 'text-brand-moss'
-                    }`}
-                  >
-                    {row.type === 'income' ? '+' : '−'} {formatCurrency(row.amount)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-brand-moss/10"
+                          style={{ backgroundColor: selected?.color ?? '#D8D8D8' }}
+                        />
+                        <select
+                          value={row.categoryId}
+                          disabled={submitting}
+                          onChange={(e) =>
+                            onChangeRow(index, { categoryId: e.target.value })
+                          }
+                          className={`${inputClass} min-w-[10rem]`}
+                          aria-label="Categoria"
+                        >
+                          <option value="">Sem categoria</option>
+                          {categories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={row.amount}
+                        disabled={submitting}
+                        onChange={(e) =>
+                          onChangeRow(index, {
+                            amount: Math.abs(Number(e.target.value)) || 0,
+                          })
+                        }
+                        className={`${inputClass} min-w-[7rem] text-right font-medium ${
+                          row.type === 'income'
+                            ? 'text-brand-aqua'
+                            : 'text-brand-moss'
+                        }`}
+                        aria-label="Valor"
+                      />
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onRemoveRow(index)}
+                        disabled={submitting}
+                        className="rounded-lg p-1.5 text-brand-gray transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                        aria-label="Remover linha"
+                        title="Remover linha"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Rodapé / ações */}
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-brand-moss/10 px-4 py-4">
@@ -158,7 +219,7 @@ export function ReviewTransactions({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={submitting}
+          disabled={submitting || rows.length === 0}
           className="inline-flex items-center gap-2 rounded-xl bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
