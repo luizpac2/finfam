@@ -92,11 +92,11 @@ export function ReviewTransactions({
         </p>
       ) : (
         <div className="max-h-[calc(100vh-19rem)] overflow-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <table className="border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-brand-light text-xs uppercase tracking-wide text-brand-gray">
               <tr>
                 <th className="px-3 py-2 font-medium">Data</th>
-                <th className="w-full px-3 py-2 font-medium">Descrição</th>
+                <th className="px-3 py-2 font-medium">Descrição</th>
                 <th className="px-3 py-2 font-medium">Tipo</th>
                 <th className="px-3 py-2 font-medium">Categoria</th>
                 <th className="px-3 py-2 text-right font-medium">Valor</th>
@@ -128,7 +128,7 @@ export function ReviewTransactions({
                         onChange={(e) =>
                           onChangeRow(index, { description: e.target.value })
                         }
-                        className={`${inputClass} min-w-[16rem]`}
+                        className={`${inputClass} w-[22rem]`}
                         aria-label="Descrição"
                       />
                     </td>
@@ -171,7 +171,7 @@ export function ReviewTransactions({
                           onChange={(e) =>
                             onChangeRow(index, { categoryId: e.target.value })
                           }
-                          className={`${inputClass} w-[11rem]`}
+                          className={`${inputClass} w-[15rem]`}
                           aria-label="Categoria"
                         >
                           <option value="">Sem categoria</option>
