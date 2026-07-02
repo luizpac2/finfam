@@ -425,12 +425,16 @@ export const parseStatementText = (text: string): ParsedTransaction[] => {
   const flush = () => {
     if (current && current.amount > 0) {
       const description = current.parts.join(' ').replace(/\s+/g, ' ').trim();
-      transactions.push({
-        date: current.date,
-        description: description || 'Lançamento',
-        amount: current.amount,
-        type: current.type,
-      });
+      // Ignora as transferências automáticas de aplicação/resgate ("BB Rende
+      // Fácil"): não são receitas/despesas reais e inflariam os totais.
+      if (!/rende\s*f[aá]cil/i.test(description)) {
+        transactions.push({
+          date: current.date,
+          description: description || 'Lançamento',
+          amount: current.amount,
+          type: current.type,
+        });
+      }
     }
     current = null;
   };
