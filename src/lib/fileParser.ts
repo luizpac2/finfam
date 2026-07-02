@@ -374,47 +374,67 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
 // Texto genérico (usado por PDF e TXT sem estrutura)
 // =============================================================================
 
-// Heurística para extratos brasileiros: data dd/mm/aaaa + valor 1.234,56.
-const TEXT_DATE = /(\d{2}\/\d{2}\/\d{2,4})/;
-const TEXT_AMOUNT = /-?\s?R?\$?\s?\d{1,3}(?:\.\d{3})*,\d{2}/g;
+const TEXT_DATE = /\d{2}\/\d{2}\/\d{2,4}/; // dd/mm/aaaa
+const AMOUNT_IN_TOKEN = /\d{1,3}(?:\.\d{3})*,\d{2}/; // valor monetário BR
 
 /**
  * Converte texto bruto de extrato em lançamentos padronizados.
- * Heurística genérica (best-effort): cada linha com data + valor vira um
- * lançamento. Layouts variam muito entre bancos — OFX/OFC/CSV são mais confiáveis.
+ *
+ * Heurística pensada para extratos brasileiros — ex.: Banco do Brasil, cujas
+ * colunas são **Dia | Lote | Documento | Histórico | Valor**:
+ *  - a DATA é o primeiro dd/mm/aaaa da linha;
+ *  - o VALOR é o último número monetário (a coluna Valor fica à direita);
+ *  - o SINAL define o tipo: negativo (`-`/`D`) → despesa; positivo → receita;
+ *  - a DESCRIÇÃO usa só o **Histórico**, pulando as colunas numéricas
+ *    iniciais (Lote e Documento).
  */
 export const parseStatementText = (text: string): ParsedTransaction[] => {
   const transactions: ParsedTransaction[] = [];
 
-  for (const line of text.split('\n')) {
-    const dateMatch = line.match(TEXT_DATE);
-    if (!dateMatch) continue;
+  for (const rawLine of text.split('\n')) {
+    const tokens = rawLine.replace(/\s+/g, ' ').trim().split(' ');
+    if (tokens.length === 0) continue;
 
-    const amounts = line.match(TEXT_AMOUNT);
-    if (!amounts || amounts.length === 0) continue;
+    const dateIdx = tokens.findIndex((t) => TEXT_DATE.test(t));
+    if (dateIdx === -1) continue;
+    const date = parseFlexibleDate((tokens[dateIdx].match(TEXT_DATE) ?? [''])[0]);
+    if (!date) continue;
 
-    const rawAmount = amounts[0]; // 1º valor = lançamento (2º costuma ser saldo)
+    // Último token monetário à direita da data = coluna "Valor".
+    let amountIdx = -1;
+    for (let k = tokens.length - 1; k > dateIdx; k -= 1) {
+      if (AMOUNT_IN_TOKEN.test(tokens[k])) {
+        amountIdx = k;
+        break;
+      }
+    }
+    if (amountIdx === -1) continue;
+
+    const amountToken = tokens[amountIdx];
+    const nextToken = tokens[amountIdx + 1] ?? '';
+    const rawAmount = (amountToken.match(AMOUNT_IN_TOKEN) ?? [''])[0];
     const amount = parseAmount(rawAmount);
     if (Number.isNaN(amount) || amount === 0) continue;
 
-    const date = parseFlexibleDate(dateMatch[1]);
-    if (!date) continue;
+    // Sinal: "-" junto do valor, ou sufixo "-"/"D" logo depois.
+    const isNegative =
+      amountToken.includes('-') ||
+      /^-/.test(nextToken) ||
+      /^d$/i.test(nextToken) ||
+      /d$/i.test(amountToken);
+    const type: TransactionType = isNegative ? 'expense' : 'income';
 
-    const description = line
-      .replace(dateMatch[1], '')
-      .replace(rawAmount, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const isDebit = /(^|\s)D(\s|$)/.test(line) || rawAmount.includes('-');
-    const isCredit = /(^|\s)C(\s|$)/.test(line);
-    const type: TransactionType = isCredit && !isDebit ? 'income' : 'expense';
+    // Histórico: entre a data e o valor, ignorando colunas numéricas.
+    const between = tokens.slice(dateIdx + 1, amountIdx);
+    let i = 0;
+    while (i < between.length && /^[\d.\-+/]+$/.test(between[i])) i += 1;
+    const historico = between.slice(i).join(' ').trim();
 
     transactions.push({
       date,
-      description: description || 'Lançamento',
+      description: historico || 'Lançamento',
       amount: Math.abs(amount),
-      type: amount < 0 ? 'expense' : type,
+      type,
     });
   }
 
