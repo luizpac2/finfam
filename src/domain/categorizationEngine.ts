@@ -253,6 +253,29 @@ export const CATEGORY_RULES: CategoryRule[] = [
 export const FALLBACK_CATEGORY = 'Outros';
 
 /**
+ * Palavras-chave que identificam a linha do PAGAMENTO da própria fatura no
+ * extrato do cartão (um crédito que NÃO é despesa). Serve para distinguir o
+ * pagamento de um estorno/reembolso (que também é um crédito, mas deve entrar).
+ */
+const CARD_PAYMENT_KEYWORDS = [
+  'PAGAMENTO',
+  'PAGTO',
+  'PGTO',
+  'PAG FATURA',
+  'PAG. FATURA',
+];
+
+/**
+ * Indica se a descrição parece ser o pagamento da própria fatura do cartão.
+ * Só faz sentido para linhas de crédito (entrada) do extrato do cartão.
+ */
+export const isCardBillPayment = (description: string): boolean => {
+  const text = normalizeText(description);
+  if (!text) return false;
+  return CARD_PAYMENT_KEYWORDS.some((keyword) => text.includes(keyword));
+};
+
+/**
  * Sugere o NOME canônico da categoria para uma transação, ou `null` quando
  * nenhuma regra casa (deixando a decisão para o fallback/usuário).
  */

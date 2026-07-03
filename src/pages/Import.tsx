@@ -7,7 +7,10 @@ import { useToast } from '../hooks/useToast';
 import { categoryService, transactionService } from '../services';
 import type { Category } from '../domain/entities/Category';
 import { parseStatementFile } from '../lib/fileParser';
-import { suggestCategoryId } from '../domain/categorizationEngine';
+import {
+  isCardBillPayment,
+  suggestCategoryId,
+} from '../domain/categorizationEngine';
 import {
   detectDuplicates,
   type DuplicateReason,
@@ -97,17 +100,21 @@ export default function Import() {
         const duplicate = duplicates.get(index);
 
         // Extrato de cartão: as compras (débitos) viram despesas ligadas ao
-        // cartão; as entradas (créditos) são o pagamento da própria fatura e
-        // ficam desmarcadas.
+        // cartão. As entradas (créditos) podem ser o pagamento da própria fatura
+        // (excluído) ou um estorno/reembolso (mantido) — distinguidos por
+        // palavra-chave.
         if (isCardStatement) {
-          const isPayment = tx.type === 'income';
+          const isCredit = tx.type === 'income';
+          const isPayment = isCredit && isCardBillPayment(tx.description);
+          const isRefund = isCredit && !isPayment;
           return {
             ...tx,
-            categoryId: isPayment
+            categoryId: isCredit
               ? ''
               : suggestCategoryId(tx.description, 'expense', categories),
             cardId: isPayment ? undefined : selectedCardId,
             cardPayment: isPayment || undefined,
+            cardCredit: isRefund || undefined,
             duplicate,
             include: !isPayment && !duplicate,
           };

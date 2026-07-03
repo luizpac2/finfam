@@ -22,6 +22,8 @@ export interface ReviewRow extends ParsedTransaction {
   cardId?: string;
   /** Linha do pagamento da própria fatura — excluída por padrão. */
   cardPayment?: boolean;
+  /** Crédito no cartão que NÃO é pagamento (estorno/reembolso) — mantido. */
+  cardCredit?: boolean;
 }
 
 interface ReviewTransactionsProps {
@@ -226,6 +228,11 @@ export function ReviewTransactions({
                         {row.cardPayment && (
                           <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                             Pgto fatura
+                          </span>
+                        )}
+                        {row.cardCredit && (
+                          <span className="shrink-0 rounded-full bg-brand-aqua/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-moss">
+                            Crédito
                           </span>
                         )}
                         {isDup && (
