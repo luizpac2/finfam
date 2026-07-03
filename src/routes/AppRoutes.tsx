@@ -8,6 +8,7 @@ import Login from '../pages/Login'; // eager: primeira tela dos não autenticado
 
 // Carregamento sob demanda — mantém o login leve (sem Recharts no bundle inicial).
 const Dashboard = lazy(() => import('../pages/Dashboard'));
+const AnalyticsDashboard = lazy(() => import('../pages/AnalyticsDashboard'));
 const Import = lazy(() => import('../pages/Import'));
 const TransactionsPage = lazy(() => import('../pages/TransactionsPage'));
 const CategoriesPage = lazy(() => import('../pages/CategoriesPage'));
@@ -34,6 +35,7 @@ export function AppRoutes() {
           }
         >
           <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<AnalyticsDashboard />} />
           <Route path="/importar" element={<Import />} />
           <Route path="/transacoes" element={<TransactionsPage />} />
           <Route

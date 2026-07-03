@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
+  BarChart3,
   Upload,
   Receipt,
   Tags,
@@ -46,6 +47,7 @@ export function MainLayout() {
 
   const items: NavItem[] = [
     { label: 'Visão geral', to: '/', icon: LayoutDashboard },
+    { label: 'Dashboard', to: '/dashboard', icon: BarChart3 },
     { label: 'Transações', to: '/transacoes', icon: Receipt },
     { label: 'Importar', to: '/importar', icon: Upload },
     ...(isAdmin

@@ -41,7 +41,7 @@ const monthLabel = (date: Date): string => {
  * pagamento de fatura de cartão (categoria tipo `credit_card`) — este último
  * é ignorado para não duplicar as compras já lançadas como despesas.
  */
-const isCountable = (tx: Transaction): boolean =>
+export const isCountable = (tx: Transaction): boolean =>
   tx.status !== 'cancelled' && tx.category?.kind !== 'credit_card';
 
 /** Paleta de fallback para categorias sem cor definida (mantém o tom da marca). */
