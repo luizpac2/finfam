@@ -10,7 +10,7 @@ export type UserRole = 'admin' | 'member';
 export type UserStatus = 'invited' | 'active' | 'revoked';
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'pending' | 'paid' | 'cancelled';
-export type CategoryKind = 'income' | 'expense';
+export type CategoryKind = 'income' | 'expense' | 'credit_card';
 
 export interface Database {
   public: {
@@ -96,6 +96,7 @@ export interface Database {
           type: TransactionType;
           status: TransactionStatus;
           category_id: string | null;
+          card_id: string | null;
           user_id: string;
           created_at: string;
           updated_at: string;
@@ -108,6 +109,7 @@ export interface Database {
           type: TransactionType;
           status?: TransactionStatus;
           category_id?: string | null;
+          card_id?: string | null;
           user_id: string;
           created_at?: string;
           updated_at?: string;
@@ -120,6 +122,7 @@ export interface Database {
           type?: TransactionType;
           status?: TransactionStatus;
           category_id?: string | null;
+          card_id?: string | null;
           user_id?: string;
           created_at?: string;
           updated_at?: string;

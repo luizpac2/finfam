@@ -6,6 +6,7 @@
  * entre frontend e banco de dados.
  */
 import type {
+  CategoryKind,
   TransactionStatus,
   TransactionType,
   UserRole,
@@ -44,6 +45,13 @@ export const TransactionStatusLabel: Record<TransactionStatus, string> = {
   pending: 'Pendente',
   paid: 'Pago',
   cancelled: 'Cancelado',
+};
+
+/** Rótulos dos tipos de categoria (receita / despesa / cartão de crédito). */
+export const CategoryKindLabel: Record<CategoryKind, string> = {
+  income: 'Receita',
+  expense: 'Despesa',
+  credit_card: 'Cartão de Crédito',
 };
 
 export const UserRoleLabel: Record<UserRole, string> = {

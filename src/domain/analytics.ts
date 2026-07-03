@@ -36,7 +36,13 @@ const monthLabel = (date: Date): string => {
   return label.charAt(0).toUpperCase() + label.slice(1);
 };
 
-const isCountable = (tx: Transaction): boolean => tx.status !== 'cancelled';
+/**
+ * Uma transação entra nos agregados se não estiver cancelada e não for um
+ * pagamento de fatura de cartão (categoria tipo `credit_card`) — este último
+ * é ignorado para não duplicar as compras já lançadas como despesas.
+ */
+const isCountable = (tx: Transaction): boolean =>
+  tx.status !== 'cancelled' && tx.category?.kind !== 'credit_card';
 
 /** Paleta de fallback para categorias sem cor definida (mantém o tom da marca). */
 const FALLBACK_COLORS = [

@@ -169,26 +169,33 @@ export default function CategoriesPage() {
               <span className="mb-1 block text-sm font-medium text-brand-moss">
                 Tipo
               </span>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-brand-light p-1">
-                {(['income', 'expense'] as CategoryKind[]).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    disabled={Boolean(form.parentId)}
-                    onClick={() =>
-                      setForm((f) => ({ ...f, kind: k, parentId: '' }))
-                    }
-                    className={`rounded-md py-1.5 text-sm font-medium transition disabled:opacity-60 ${
-                      (form.parentId
-                        ? parentChoices.find((c) => c.id === form.parentId)?.kind
-                        : form.kind) === k
-                        ? 'bg-white text-brand-moss shadow-sm'
-                        : 'text-brand-gray'
-                    }`}
-                  >
-                    {k === 'income' ? 'Receita' : 'Despesa'}
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 gap-1 rounded-lg bg-brand-light p-1">
+                {(['income', 'expense', 'credit_card'] as CategoryKind[]).map(
+                  (k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      disabled={Boolean(form.parentId)}
+                      onClick={() =>
+                        setForm((f) => ({ ...f, kind: k, parentId: '' }))
+                      }
+                      className={`rounded-md px-1 py-1.5 text-sm font-medium transition disabled:opacity-60 ${
+                        (form.parentId
+                          ? parentChoices.find((c) => c.id === form.parentId)
+                              ?.kind
+                          : form.kind) === k
+                          ? 'bg-white text-brand-moss shadow-sm'
+                          : 'text-brand-gray'
+                      }`}
+                    >
+                      {k === 'income'
+                        ? 'Receita'
+                        : k === 'expense'
+                          ? 'Despesa'
+                          : 'Cartão'}
+                    </button>
+                  )
+                )}
               </div>
             </div>
 
@@ -269,7 +276,7 @@ export default function CategoriesPage() {
       </Card>
 
       {/* Listas por tipo */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <CategoryColumn
           title="Receitas"
           kind="income"
@@ -281,6 +288,14 @@ export default function CategoriesPage() {
         <CategoryColumn
           title="Despesas"
           kind="expense"
+          categories={categories}
+          busyId={busyId}
+          onEdit={startEdit}
+          onRemove={remove}
+        />
+        <CategoryColumn
+          title="Cartões de Crédito"
+          kind="credit_card"
           categories={categories}
           busyId={busyId}
           onEdit={startEdit}
@@ -332,7 +347,11 @@ function CategoryColumn({
       <div className="mb-2 flex items-center gap-2">
         <span
           className={`h-2.5 w-2.5 rounded-full ${
-            kind === 'income' ? 'bg-brand-income' : 'bg-brand-expense'
+            kind === 'income'
+              ? 'bg-brand-income'
+              : kind === 'expense'
+                ? 'bg-brand-expense'
+                : 'bg-brand-aqua'
           }`}
         />
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>

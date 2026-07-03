@@ -15,8 +15,9 @@ import { unwrap } from './serviceError';
 const TABLE = 'transactions';
 
 // Seleciona a transação já com a categoria relacionada (join via FK).
+// Inclui `kind` para permitir excluir pagamentos de fatura (cartão) dos totais.
 const SELECT_WITH_CATEGORY =
-  '*, categories ( id, name, icon, color, created_at, updated_at )';
+  '*, categories ( id, name, icon, color, kind, parent_id, created_at, updated_at )';
 
 export interface TransactionFilters {
   type?: TransactionType;
@@ -78,6 +79,7 @@ export const transactionService = {
           date: input.date,
           status: input.status,
           category_id: input.categoryId ?? null,
+          card_id: input.cardId ?? null,
         })
         .select(SELECT_WITH_CATEGORY)
         .single(),
@@ -118,6 +120,7 @@ export const transactionService = {
       date: input.date,
       status: input.status ?? 'pending',
       category_id: input.categoryId ?? null,
+      card_id: input.cardId ?? null,
     }));
     const data = unwrap(
       await supabase.from(TABLE).insert(rows).select('id'),
@@ -167,6 +170,9 @@ export const transactionService = {
     const totals = transactions.reduce(
       (acc, tx) => {
         if (tx.status === 'cancelled') return acc;
+        // Pagamento de fatura (categoria tipo cartão) não entra no saldo:
+        // as compras do cartão já são lançadas como despesas.
+        if (tx.category?.kind === 'credit_card') return acc;
         if (tx.type === 'income') acc.income += tx.amount;
         else if (tx.type === 'expense') acc.expense += tx.amount;
         return acc;

@@ -18,6 +18,10 @@ export interface ReviewRow extends ParsedTransaction {
   include: boolean;
   /** Preenchido quando a linha parece duplicada. */
   duplicate?: DuplicateReason;
+  /** Cartão ao qual a compra pertence (importação de extrato de cartão). */
+  cardId?: string;
+  /** Linha do pagamento da própria fatura — excluída por padrão. */
+  cardPayment?: boolean;
 }
 
 interface ReviewTransactionsProps {
@@ -88,6 +92,7 @@ export function ReviewTransactions({
       includedCount: included.length,
       duplicateCount: duplicates.length,
       existingDupes,
+      cardPaymentCount: rows.filter((row) => row.cardPayment).length,
       allExistingDupes:
         rows.length > 0 && existingDupes === rows.length,
       allIncluded: rows.length > 0 && included.length === rows.length,
@@ -142,6 +147,15 @@ export function ReviewTransactions({
         </div>
       )}
 
+      {/* Aviso: pagamento(s) da própria fatura, excluído(s) por padrão */}
+      {stats.cardPaymentCount > 0 && (
+        <div className="border-b border-brand-moss/10 bg-brand-light px-4 py-2.5 text-sm text-brand-gray">
+          {stats.cardPaymentCount} lançamento(s) identificados como{' '}
+          <strong className="text-brand-moss">pagamento da fatura</strong> do
+          cartão foram desmarcados (não são despesas).
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-brand-gray">
           Nenhuma linha para importar. Cancele para começar de novo.
@@ -173,11 +187,12 @@ export function ReviewTransactions({
               {rows.map((row, index) => {
                 const selected = categoryById.get(row.categoryId);
                 const isDup = Boolean(row.duplicate);
+                const flagged = isDup || row.cardPayment;
                 return (
                   <tr
                     key={index}
                     className={
-                      isDup
+                      flagged
                         ? 'bg-amber-50/70 hover:bg-amber-50'
                         : 'hover:bg-brand-light/50'
                     }
@@ -208,6 +223,11 @@ export function ReviewTransactions({
                     </td>
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
+                        {row.cardPayment && (
+                          <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                            Pgto fatura
+                          </span>
+                        )}
                         {isDup && (
                           <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                             {duplicateBadge[row.duplicate!]}

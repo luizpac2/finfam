@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CreditCard } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
@@ -38,6 +40,15 @@ export default function Import() {
   const [step, setStep] = useState<Step>('upload');
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Extrato de cartão de crédito: liga o modo e escolhe de qual cartão.
+  const [isCardStatement, setIsCardStatement] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState('');
+
+  const cards = useMemo(
+    () => categories.filter((c) => c.kind === 'credit_card'),
+    [categories]
+  );
 
   // Carrega as categorias para alimentar a inferência e os dropdowns.
   useEffect(() => {
@@ -84,6 +95,24 @@ export default function Import() {
       // Pré-categoriza cada linha; duplicatas entram desmarcadas.
       const reviewed: ReviewRow[] = parsed.map((tx, index) => {
         const duplicate = duplicates.get(index);
+
+        // Extrato de cartão: as compras (débitos) viram despesas ligadas ao
+        // cartão; as entradas (créditos) são o pagamento da própria fatura e
+        // ficam desmarcadas.
+        if (isCardStatement) {
+          const isPayment = tx.type === 'income';
+          return {
+            ...tx,
+            categoryId: isPayment
+              ? ''
+              : suggestCategoryId(tx.description, 'expense', categories),
+            cardId: isPayment ? undefined : selectedCardId,
+            cardPayment: isPayment || undefined,
+            duplicate,
+            include: !isPayment && !duplicate,
+          };
+        }
+
         return {
           ...tx,
           categoryId: suggestCategoryId(tx.description, tx.type, categories),
@@ -131,6 +160,8 @@ export default function Import() {
   const reset = () => {
     setRows([]);
     setStep('upload');
+    setIsCardStatement(false);
+    setSelectedCardId('');
   };
 
   const handleConfirm = async () => {
@@ -148,6 +179,7 @@ export default function Import() {
           status: 'pending',
           userId: profile.id,
           categoryId: row.categoryId || null,
+          cardId: row.cardId || null,
         }))
       );
       toast.success(`${count} transação(ões) importada(s) com sucesso.`);
@@ -172,11 +204,77 @@ export default function Import() {
       </header>
 
       {step === 'upload' ? (
-        <DragAndDropZone
-          onFileSelected={handleFile}
-          disabled={parsing}
-          hint={parsing ? 'Lendo o arquivo…' : undefined}
-        />
+        <div className="space-y-4">
+          {/* Extrato de cartão de crédito */}
+          <div className="rounded-2xl border border-brand-moss/10 bg-white p-4 shadow-card">
+            <label className="flex cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                checked={isCardStatement}
+                onChange={(e) => {
+                  setIsCardStatement(e.target.checked);
+                  if (!e.target.checked) setSelectedCardId('');
+                }}
+                className="h-4 w-4 cursor-pointer accent-brand-aqua"
+              />
+              <span className="flex items-center gap-2 text-sm font-medium text-brand-moss">
+                <CreditCard className="h-4 w-4 text-brand-aqua" strokeWidth={1.8} />
+                Este é um extrato de cartão de crédito
+              </span>
+            </label>
+
+            {isCardStatement && (
+              <div className="mt-3 border-t border-brand-moss/10 pt-3">
+                {cards.length === 0 ? (
+                  <p className="text-sm text-brand-gray">
+                    Nenhum cartão cadastrado. Cadastre um em{' '}
+                    <Link
+                      to="/categorias"
+                      className="font-medium text-brand-moss underline"
+                    >
+                      Categorias
+                    </Link>{' '}
+                    (tipo Cartão de Crédito).
+                  </p>
+                ) : (
+                  <label className="block max-w-xs">
+                    <span className="mb-1 block text-sm font-medium text-brand-moss">
+                      Qual cartão?
+                    </span>
+                    <select
+                      value={selectedCardId}
+                      onChange={(e) => setSelectedCardId(e.target.value)}
+                      className="w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30"
+                    >
+                      <option value="">Selecione o cartão…</option>
+                      {cards.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <p className="mt-2 text-xs text-brand-gray">
+                  As compras entram como despesas; o pagamento da própria fatura
+                  é identificado e desmarcado automaticamente.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DragAndDropZone
+            onFileSelected={handleFile}
+            disabled={parsing || (isCardStatement && !selectedCardId)}
+            hint={
+              parsing
+                ? 'Lendo o arquivo…'
+                : isCardStatement && !selectedCardId
+                  ? 'Escolha o cartão para continuar'
+                  : undefined
+            }
+          />
+        </div>
       ) : (
         <ReviewTransactions
           rows={rows}

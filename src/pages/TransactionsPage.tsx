@@ -145,6 +145,8 @@ export default function TransactionsPage() {
       filtered.reduce(
         (acc, tx) => {
           if (tx.status === 'cancelled') return acc;
+          // Pagamento de fatura (categoria cartão) não conta em receitas/despesas.
+          if (tx.category?.kind === 'credit_card') return acc;
           if (tx.type === 'income') acc.income += tx.amount;
           else acc.expense += tx.amount;
           return acc;

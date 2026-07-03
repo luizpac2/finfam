@@ -14,6 +14,7 @@ export interface Transaction {
   type: TransactionType;
   status: TransactionStatus;
   categoryId: string | null;
+  cardId: string | null; // cartão de crédito da compra (importação de fatura)
   userId: string;
   category: Category | null; // categoria expandida (join opcional)
   createdAt: string;
@@ -26,6 +27,7 @@ export interface TransactionInput {
   type: TransactionType;
   status?: TransactionStatus;
   categoryId?: string | null;
+  cardId?: string | null;
   userId: string;
 }
 
@@ -40,6 +42,7 @@ export const mapToTransaction = (
   type: row.type,
   status: row.status,
   categoryId: row.category_id,
+  cardId: row.card_id,
   userId: row.user_id,
   category: row.categories ? mapToCategory(row.categories) : null,
   createdAt: row.created_at,
@@ -56,6 +59,7 @@ export const mapToTransactionRow = (
   if (input.type !== undefined) row.type = input.type;
   if (input.status !== undefined) row.status = input.status;
   if (input.categoryId !== undefined) row.category_id = input.categoryId;
+  if (input.cardId !== undefined) row.card_id = input.cardId;
   if (input.userId !== undefined) row.user_id = input.userId;
   return row;
 };

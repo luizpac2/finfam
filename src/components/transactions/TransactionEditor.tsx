@@ -49,7 +49,11 @@ export function TransactionEditor({
     status: (initial?.status ?? 'pending') as TransactionStatus,
   }));
 
-  const categoryOptions = buildCategoryOptions(categories, form.type);
+  // Para despesas, além das categorias de despesa, oferecemos os cartões — assim
+  // o pagamento da fatura (no extrato do banco) pode ser marcado como "Cartão".
+  const expenseOptions = buildCategoryOptions(categories, 'expense');
+  const incomeOptions = buildCategoryOptions(categories, 'income');
+  const cardOptions = buildCategoryOptions(categories, 'credit_card');
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -161,11 +165,32 @@ export function TransactionEditor({
               className={inputClass}
             >
               <option value="">Sem categoria</option>
-              {categoryOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
+              {form.type === 'income'
+                ? incomeOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))
+                : (
+                    <>
+                      <optgroup label="Despesas">
+                        {expenseOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {cardOptions.length > 0 && (
+                        <optgroup label="Cartão de Crédito (pagamento de fatura)">
+                          {cardOptions.map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </>
+                  )}
             </select>
           </label>
           <label className="block">
