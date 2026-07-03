@@ -16,8 +16,11 @@ const TABLE = 'transactions';
 
 // Seleciona a transação já com a categoria relacionada (join via FK).
 // Inclui `kind` para permitir excluir pagamentos de fatura (cartão) dos totais.
+// IMPORTANTE: `transactions` tem DUAS FKs para `categories` (category_id e
+// card_id); por isso desambiguamos o embed com `!category_id`, senão o PostgREST
+// rejeita o join por ambiguidade.
 const SELECT_WITH_CATEGORY =
-  '*, categories ( id, name, icon, color, kind, parent_id, created_at, updated_at )';
+  '*, categories!category_id ( id, name, icon, color, kind, parent_id, created_at, updated_at )';
 
 export interface TransactionFilters {
   type?: TransactionType;
