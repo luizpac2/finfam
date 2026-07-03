@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { Ban, Loader2, Plus, RefreshCw, Tag, Trash2 } from 'lucide-react';
+import { Ban, Eraser, Loader2, Plus, RefreshCw, Tag, Trash2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
@@ -45,6 +45,7 @@ export default function RulesPage() {
   const [saving, setSaving] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [applyingAll, setApplyingAll] = useState(false);
+  const [applyingAllIgnore, setApplyingAllIgnore] = useState(false);
 
   const [keyword, setKeyword] = useState('');
   const [action, setAction] = useState<RuleAction>('categorize');
@@ -183,6 +184,71 @@ export default function RulesPage() {
       );
     } finally {
       setApplyingAll(false);
+    }
+  };
+
+  // Aplica UMA regra de "ignorar" ao histórico: EXCLUI permanentemente os
+  // lançamentos cuja descrição contém a palavra.
+  const applyIgnoreRuleToHistory = async (rule: CategoryRule) => {
+    if (rule.action !== 'ignore') return;
+    setApplyingId(rule.id);
+    try {
+      const all = await transactionService.list({});
+      const kw = normalizeText(rule.keyword);
+      const ids = all
+        .filter((tx) => normalizeText(tx.description).includes(kw))
+        .map((tx) => tx.id);
+
+      if (ids.length === 0) {
+        toast.info('Nenhum lançamento do histórico para excluir.');
+        return;
+      }
+      if (
+        !window.confirm(
+          `Excluir PERMANENTEMENTE ${ids.length} lançamento(s) que contêm "${rule.keyword}"? Isso vale para todo o histórico e não pode ser desfeito.`
+        )
+      )
+        return;
+
+      await transactionService.removeMany(ids);
+      toast.success(`${ids.length} lançamento(s) excluídos.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir.');
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  // Aplica TODAS as regras de "ignorar" ao histórico de uma vez (exclui).
+  const applyAllIgnoreToHistory = async () => {
+    if (!rules.some((r) => r.action === 'ignore')) {
+      toast.info('Nenhuma regra de ignorar para aplicar.');
+      return;
+    }
+    setApplyingAllIgnore(true);
+    try {
+      const all = await transactionService.list({});
+      const ids = all
+        .filter((tx) => applyUserRules(tx.description, rules).ignore)
+        .map((tx) => tx.id);
+
+      if (ids.length === 0) {
+        toast.info('Nenhum lançamento do histórico para excluir.');
+        return;
+      }
+      if (
+        !window.confirm(
+          `Excluir PERMANENTEMENTE ${ids.length} lançamento(s) que casam com alguma regra de ignorar? Não pode ser desfeito.`
+        )
+      )
+        return;
+
+      await transactionService.removeMany(ids);
+      toast.success(`${ids.length} lançamento(s) excluídos.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir.');
+    } finally {
+      setApplyingAllIgnore(false);
     }
   };
 
@@ -347,7 +413,29 @@ export default function RulesPage() {
           )}
         </RuleColumn>
 
-        <RuleColumn title="Ignorar" icon={Ban} count={ignoreRules.length}>
+        <RuleColumn
+          title="Ignorar"
+          icon={Ban}
+          count={ignoreRules.length}
+          action={
+            ignoreRules.length > 0 && (
+              <button
+                type="button"
+                onClick={applyAllIgnoreToHistory}
+                disabled={applyingAllIgnore || applyingId !== null}
+                title="Exclui do histórico todos os lançamentos que casam com as regras de ignorar"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {applyingAllIgnore ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                Excluir do histórico
+              </button>
+            )
+          }
+        >
           {ignoreRules.length === 0 ? (
             <Empty text="Nenhuma palavra ignorada ainda." />
           ) : (
@@ -357,6 +445,10 @@ export default function RulesPage() {
                 keyword={rule.keyword}
                 busy={busyId === rule.id}
                 onRemove={() => remove(rule)}
+                onApply={() => applyIgnoreRuleToHistory(rule)}
+                applying={applyingId === rule.id}
+                applyIcon="delete"
+                applyTitle="Excluir do histórico os lançamentos com esta palavra"
               >
                 <span className="text-sm italic text-brand-gray">
                   ignorar na importação
@@ -410,6 +502,8 @@ function RuleRow({
   onRemove,
   onApply,
   applying = false,
+  applyIcon = 'apply',
+  applyTitle = 'Aplicar esta regra a todo o histórico',
   children,
 }: {
   keyword: string;
@@ -417,8 +511,11 @@ function RuleRow({
   onRemove: () => void;
   onApply?: () => void;
   applying?: boolean;
+  applyIcon?: 'apply' | 'delete';
+  applyTitle?: string;
   children: ReactNode;
 }) {
+  const isDelete = applyIcon === 'delete';
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-2.5">
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -434,12 +531,16 @@ function RuleRow({
             type="button"
             onClick={onApply}
             disabled={applying || busy}
-            title="Aplicar esta regra a todo o histórico"
-            className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss disabled:opacity-50"
-            aria-label={`Aplicar regra ${keyword} ao histórico`}
+            title={applyTitle}
+            className={`rounded-lg p-1.5 text-brand-gray transition hover:bg-white disabled:opacity-50 ${
+              isDelete ? 'hover:text-red-600' : 'hover:text-brand-moss'
+            }`}
+            aria-label={`${applyTitle} (${keyword})`}
           >
             {applying ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isDelete ? (
+              <Eraser className="h-4 w-4" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}

@@ -160,13 +160,17 @@ export const transactionService = {
     }
   },
 
-  /** Remove várias transações de uma vez (edição em massa). */
+  /** Remove várias transações de uma vez (em lotes). */
   async removeMany(ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
-    unwrap(
-      await supabase.from(TABLE).delete().in('id', ids),
-      'excluir as transações'
-    );
+    const CHUNK = 200;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK);
+      if (part.length === 0) continue;
+      unwrap(
+        await supabase.from(TABLE).delete().in('id', part),
+        'excluir as transações'
+      );
+    }
   },
 
   /**
