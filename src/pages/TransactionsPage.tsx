@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, Plus, Search, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2, Wand2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { categoryService, transactionService } from '../services';
-import { aiCategorizationService } from '../services/aiCategorizationService';
-import {
-  normalizeText,
-  suggestCategoryIdStrict,
-} from '../domain/categorizationEngine';
+import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import {
   buildCategoryOptions,
   type Category,
@@ -69,7 +65,6 @@ export default function TransactionsPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoCategorizing, setAutoCategorizing] = useState(false);
-  const [aiCategorizing, setAiCategorizing] = useState(false);
 
   // Categorias (para o filtro lateral, os dropdowns do editor e a edição em massa).
   useEffect(() => {
@@ -292,71 +287,6 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleAiCategorize = async () => {
-    const targets = transactions.filter(
-      (tx) =>
-        !tx.categoryId &&
-        tx.status !== 'cancelled' &&
-        tx.category?.kind !== 'credit_card'
-    );
-    if (targets.length === 0) {
-      toast.info('Nenhum lançamento sem categoria neste período.');
-      return;
-    }
-
-    const options = categories
-      .filter((c) => c.kind === 'income' || c.kind === 'expense')
-      .map((c) => ({ name: c.name, kind: c.kind as 'income' | 'expense' }));
-
-    setAiCategorizing(true);
-    try {
-      const items = targets.map((tx) => ({
-        id: tx.id,
-        description: tx.description,
-        type: tx.type,
-      }));
-      const suggestions = await aiCategorizationService.categorize(
-        items,
-        options
-      );
-
-      // Mapeia o NOME devolvido pela IA para o id da categoria (respeitando o
-      // tipo do lançamento) e agrupa por categoria para atualizar em lote.
-      const typeById = new Map(targets.map((t) => [t.id, t.type] as const));
-      const groups = new Map<string, string[]>();
-      for (const [txId, name] of suggestions) {
-        const type = typeById.get(txId);
-        if (!type) continue;
-        const match = categories.find(
-          (c) =>
-            c.kind === type && normalizeText(c.name) === normalizeText(name)
-        );
-        if (!match) continue;
-        const list = groups.get(match.id) ?? [];
-        list.push(txId);
-        groups.set(match.id, list);
-      }
-
-      const total = [...groups.values()].reduce((n, ids) => n + ids.length, 0);
-      if (total === 0) {
-        toast.info('A IA não encontrou categorias para estes lançamentos.');
-        return;
-      }
-
-      for (const [catId, ids] of groups) {
-        await transactionService.setCategoryMany(ids, catId);
-      }
-      toast.success(`${total} lançamento(s) categorizados pela IA.`);
-      await loadTransactions(period);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Falha na categorização por IA.'
-      );
-    } finally {
-      setAiCategorizing(false);
-    }
-  };
-
   const bulkDelete = async () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
@@ -437,22 +367,12 @@ export default function TransactionsPage() {
               <button
                 type="button"
                 onClick={handleAutoCategorize}
-                disabled={autoCategorizing || aiCategorizing || loading}
-                title="Preenche a categoria dos lançamentos sem categoria pela descrição (regras)"
+                disabled={autoCategorizing || loading}
+                title="Preenche a categoria dos lançamentos sem categoria pela descrição"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-moss/25 px-4 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Wand2 className="h-4 w-4" />
                 {autoCategorizing ? 'Categorizando…' : 'Categorizar automaticamente'}
-              </button>
-              <button
-                type="button"
-                onClick={handleAiCategorize}
-                disabled={aiCategorizing || autoCategorizing || loading}
-                title="Usa IA (Claude) para categorizar os lançamentos que sobraram sem categoria"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-moss/25 px-4 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Sparkles className="h-4 w-4 text-brand-aqua" />
-                {aiCategorizing ? 'Categorizando…' : 'Categorizar com IA'}
               </button>
               <button
                 type="button"
