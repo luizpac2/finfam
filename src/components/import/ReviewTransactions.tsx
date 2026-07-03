@@ -71,6 +71,7 @@ export function ReviewTransactions({
     () => ({
       income: buildCategoryOptions(categories, 'income'),
       expense: buildCategoryOptions(categories, 'expense'),
+      credit_card: buildCategoryOptions(categories, 'credit_card'),
     }),
     [categories]
   );
@@ -296,11 +297,32 @@ export function ReviewTransactions({
                           aria-label="Categoria"
                         >
                           <option value="">Sem categoria</option>
-                          {optionsByKind[row.type].map((opt) => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </option>
-                          ))}
+                          {row.type === 'income' ? (
+                            optionsByKind.income.map((opt) => (
+                              <option key={opt.id} value={opt.id}>
+                                {opt.label}
+                              </option>
+                            ))
+                          ) : (
+                            <>
+                              <optgroup label="Despesas">
+                                {optionsByKind.expense.map((opt) => (
+                                  <option key={opt.id} value={opt.id}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                              {optionsByKind.credit_card.length > 0 && (
+                                <optgroup label="Cartão de Crédito">
+                                  {optionsByKind.credit_card.map((opt) => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </>
+                          )}
                         </select>
                       </div>
                     </td>
