@@ -3,7 +3,8 @@ import { Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { transactionService } from '../services';
+import { categoryService, transactionService } from '../services';
+import type { Category } from '../domain/entities/Category';
 import type { Transaction } from '../domain/entities/Transaction';
 import {
   buildMonthlySeries,
@@ -13,7 +14,9 @@ import {
 import { KpiCard } from '../components/dashboard/KpiCard';
 import { IncomeExpenseBarChart } from '../components/dashboard/IncomeExpenseBarChart';
 import { ExpenseDonutChart } from '../components/dashboard/ExpenseDonutChart';
-import { PeriodFilter, type Period } from '../components/dashboard/PeriodFilter';
+import { FilterSidebar } from '../components/filters/FilterSidebar';
+import { UNCATEGORIZED } from '../components/filters/CategoryFilter';
+import type { Period } from '../components/filters/PeriodNavigator';
 import {
   BarChartSkeleton,
   DonutChartSkeleton,
@@ -44,10 +47,32 @@ export default function Dashboard() {
   const [totalBalance, setTotalBalance] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+
   const refDate = useMemo(
     () => new Date(period.year, period.month, 1),
     [period]
   );
+
+  // Categorias para o filtro lateral.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const list = await categoryService.list();
+        if (active) setCategories(list);
+      } catch {
+        /* silencioso; o painel funciona sem o filtro de categorias */
+      } finally {
+        if (active) setLoadingCategories(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -83,15 +108,24 @@ export default function Dashboard() {
     };
   }, [period, toast]);
 
+  // Aplica o filtro de categorias às agregações do período (o saldo total em
+  // conta permanece global, pois representa o acumulado de todas as categorias).
+  const visibleTx = useMemo(() => {
+    if (selectedCats.size === 0) return windowTx;
+    return windowTx.filter((tx) =>
+      selectedCats.has(tx.categoryId ?? UNCATEGORIZED)
+    );
+  }, [windowTx, selectedCats]);
+
   const series = useMemo(
-    () => buildMonthlySeries(windowTx, MONTHS_WINDOW, refDate),
-    [windowTx, refDate]
+    () => buildMonthlySeries(visibleTx, MONTHS_WINDOW, refDate),
+    [visibleTx, refDate]
   );
   const monthSummary = useMemo(
-    () => monthTotals(windowTx, refDate),
-    [windowTx, refDate]
+    () => monthTotals(visibleTx, refDate),
+    [visibleTx, refDate]
   );
-  const byCategory = useMemo(() => expenseByCategory(windowTx), [windowTx]);
+  const byCategory = useMemo(() => expenseByCategory(visibleTx), [visibleTx]);
 
   const firstName = (profile?.fullName || email || '').split(' ')[0];
   const windowLabel = `6 meses até ${new Intl.DateTimeFormat('pt-BR', {
@@ -100,71 +134,88 @@ export default function Dashboard() {
   }).format(refDate)}`;
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Cabeçalho + filtro (responsivo: empilha no mobile) */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-brand-moss sm:text-2xl">
-            {firstName ? `Olá, ${firstName}` : 'Visão geral'}
-          </h1>
-          <p className="mt-1 text-sm text-brand-gray">
-            Acompanhe as finanças da família por período.
-          </p>
-        </div>
-        <PeriodFilter value={period} onChange={setPeriod} />
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-xl font-bold tracking-tight text-brand-moss sm:text-2xl">
+          {firstName ? `Olá, ${firstName}` : 'Visão geral'}
+        </h1>
+        <p className="mt-1 text-sm text-brand-gray">
+          Acompanhe as finanças da família por período.
+        </p>
       </header>
 
-      {/* KPIs */}
-      <section className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
-        {loading ? (
-          <>
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-          </>
-        ) : (
-          <>
-            <KpiCard
-              label="Total em conta"
-              value={totalBalance}
-              icon={Wallet}
-              accent="balance"
-              hint="Saldo acumulado no período"
-            />
-            <KpiCard
-              label="Receitas do mês"
-              value={monthSummary.income}
-              icon={TrendingUp}
-              accent="income"
-            />
-            <KpiCard
-              label="Despesas do mês"
-              value={-monthSummary.expense}
-              icon={TrendingDown}
-              accent="expense"
-            />
-          </>
-        )}
-      </section>
+      <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
+        <FilterSidebar
+          period={period}
+          onPeriodChange={setPeriod}
+          categories={categories}
+          selectedCategories={selectedCats}
+          onCategoriesChange={setSelectedCats}
+          loadingCategories={loadingCategories}
+        />
 
-      {/* Gráficos */}
-      <section className="grid gap-4 sm:gap-5 lg:grid-cols-3">
-        <Panel
-          title="Receitas vs. Despesas"
-          subtitle={windowLabel}
-          className="lg:col-span-2"
-        >
-          {loading ? <BarChartSkeleton /> : <IncomeExpenseBarChart data={series} />}
-        </Panel>
+        <div className="space-y-6">
+          {/* KPIs */}
+          <section className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+            {loading ? (
+              <>
+                <KpiCardSkeleton />
+                <KpiCardSkeleton />
+                <KpiCardSkeleton />
+              </>
+            ) : (
+              <>
+                <KpiCard
+                  label="Total em conta"
+                  value={totalBalance}
+                  icon={Wallet}
+                  accent="balance"
+                  hint="Saldo acumulado no período"
+                />
+                <KpiCard
+                  label="Receitas do mês"
+                  value={monthSummary.income}
+                  icon={TrendingUp}
+                  accent="income"
+                />
+                <KpiCard
+                  label="Despesas do mês"
+                  value={-monthSummary.expense}
+                  icon={TrendingDown}
+                  accent="expense"
+                />
+              </>
+            )}
+          </section>
 
-        <Panel
-          title="Despesas por categoria"
-          subtitle={windowLabel}
-          className="lg:col-span-1"
-        >
-          {loading ? <DonutChartSkeleton /> : <ExpenseDonutChart data={byCategory} />}
-        </Panel>
-      </section>
+          {/* Gráficos */}
+          <section className="grid gap-4 sm:gap-5 xl:grid-cols-3">
+            <Panel
+              title="Receitas vs. Despesas"
+              subtitle={windowLabel}
+              className="xl:col-span-2"
+            >
+              {loading ? (
+                <BarChartSkeleton />
+              ) : (
+                <IncomeExpenseBarChart data={series} />
+              )}
+            </Panel>
+
+            <Panel
+              title="Despesas por categoria"
+              subtitle={windowLabel}
+              className="xl:col-span-1"
+            >
+              {loading ? (
+                <DonutChartSkeleton />
+              ) : (
+                <ExpenseDonutChart data={byCategory} />
+              )}
+            </Panel>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

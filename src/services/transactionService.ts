@@ -135,6 +135,30 @@ export const transactionService = {
   },
 
   /**
+   * Atribui uma categoria (ou nenhuma, se `null`) a várias transações de uma
+   * vez. Usado na edição em massa da página de Transações.
+   */
+  async setCategoryMany(ids: string[], categoryId: string | null): Promise<void> {
+    if (ids.length === 0) return;
+    unwrap(
+      await supabase
+        .from(TABLE)
+        .update({ category_id: categoryId })
+        .in('id', ids),
+      'atualizar as categorias'
+    );
+  },
+
+  /** Remove várias transações de uma vez (edição em massa). */
+  async removeMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    unwrap(
+      await supabase.from(TABLE).delete().in('id', ids),
+      'excluir as transações'
+    );
+  },
+
+  /**
    * Calcula um resumo financeiro (receitas, despesas e saldo) no período.
    * Ignora transações canceladas.
    */
