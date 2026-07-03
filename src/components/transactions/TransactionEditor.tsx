@@ -5,11 +5,7 @@ import { Modal } from '../ui/Modal';
 import { CategorySelect } from '../ui/CategorySelect';
 import type { Category } from '../../domain/entities/Category';
 import type { Transaction } from '../../domain/entities/Transaction';
-import type {
-  TransactionStatus,
-  TransactionType,
-} from '../../lib/database.types';
-import { TransactionStatusLabel } from '../../domain/constants';
+import type { TransactionType } from '../../lib/database.types';
 
 export interface TransactionFormValues {
   date: string;
@@ -17,7 +13,6 @@ export interface TransactionFormValues {
   type: TransactionType;
   amount: number;
   categoryId: string;
-  status: TransactionStatus;
 }
 
 interface TransactionEditorProps {
@@ -32,8 +27,6 @@ interface TransactionEditorProps {
 const inputClass =
   'w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
 
-const STATUSES: TransactionStatus[] = ['pending', 'paid', 'cancelled'];
-
 export function TransactionEditor({
   initial,
   categories,
@@ -47,7 +40,6 @@ export function TransactionEditor({
     type: (initial?.type ?? 'expense') as TransactionType,
     amount: initial ? String(initial.amount) : '',
     categoryId: initial?.categoryId ?? '',
-    status: (initial?.status ?? 'pending') as TransactionStatus,
   }));
 
   // Cartões (categorias tipo credit_card) — para oferecer "Cartão" no seletor
@@ -87,7 +79,6 @@ export function TransactionEditor({
       type: form.type,
       amount,
       categoryId: form.categoryId,
-      status: form.status,
     });
   };
 
@@ -182,45 +173,22 @@ export function TransactionEditor({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-brand-moss">
-              Categoria
-            </span>
-            <CategorySelect
-              value={form.categoryId}
-              onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
-              categories={categories}
-              kinds={
-                form.type === 'income' ? ['income'] : ['expense', 'credit_card']
-              }
-              emptyOption={{ value: '', label: 'Sem categoria' }}
-              placeholder="Sem categoria"
-              className="py-2"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-brand-moss">
-              Status
-            </span>
-            <select
-              value={form.status}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  status: e.target.value as TransactionStatus,
-                }))
-              }
-              className={inputClass}
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {TransactionStatusLabel[s]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-brand-moss">
+            Categoria
+          </span>
+          <CategorySelect
+            value={form.categoryId}
+            onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
+            categories={categories}
+            kinds={
+              form.type === 'income' ? ['income'] : ['expense', 'credit_card']
+            }
+            emptyOption={{ value: '', label: 'Sem categoria' }}
+            placeholder="Sem categoria"
+            className="py-2"
+          />
+        </label>
 
         <div className="flex justify-end gap-2 pt-2">
           <button

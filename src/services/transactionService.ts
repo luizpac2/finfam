@@ -235,7 +235,6 @@ export const transactionService = {
     const transactions = await this.list(period);
     const totals = transactions.reduce(
       (acc, tx) => {
-        if (tx.status === 'cancelled') return acc;
         // Pagamento de fatura (categoria tipo cartão) não entra no saldo:
         // as compras do cartão já são lançadas como despesas.
         if (tx.category?.kind === 'credit_card') return acc;

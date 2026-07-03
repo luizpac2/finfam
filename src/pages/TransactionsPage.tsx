@@ -14,8 +14,6 @@ import { applyUserRules } from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
 import type { CategoryRule } from '../domain/entities/CategoryRule';
 import type { Transaction } from '../domain/entities/Transaction';
-import type { TransactionStatus } from '../lib/database.types';
-import { TransactionStatusLabel } from '../domain/constants';
 import { FilterSidebar } from '../components/filters/FilterSidebar';
 import { UNCATEGORIZED } from '../components/filters/CategoryFilter';
 import type { Period } from '../components/filters/PeriodNavigator';
@@ -35,12 +33,6 @@ const isoDate = (d: Date) =>
 const now = new Date();
 
 type TypeFilter = 'all' | 'income' | 'expense';
-
-const statusStyle: Record<TransactionStatus, string> = {
-  pending: 'bg-brand-cream text-brand-moss',
-  paid: 'bg-brand-income/15 text-brand-income',
-  cancelled: 'bg-brand-gray/20 text-brand-gray',
-};
 
 /** Página de gestão dos lançamentos já salvos: filtrar, editar, excluir e criar. */
 export default function TransactionsPage() {
@@ -181,7 +173,6 @@ export default function TransactionsPage() {
     () =>
       filtered.reduce(
         (acc, tx) => {
-          if (tx.status === 'cancelled') return acc;
           // Pagamento de fatura (categoria cartão) não conta em receitas/despesas.
           if (tx.category?.kind === 'credit_card') return acc;
           if (tx.type === 'income') acc.income += tx.amount;
@@ -234,7 +225,6 @@ export default function TransactionsPage() {
         description: values.description,
         amount: values.amount,
         type: values.type,
-        status: values.status,
         categoryId: values.categoryId || null,
       };
       if (editing) {
@@ -286,10 +276,7 @@ export default function TransactionsPage() {
     // Alvos: lançamentos sem categoria (ignora cancelados e pagamentos de
     // fatura, que já têm a categoria do cartão).
     const targets = transactions.filter(
-      (tx) =>
-        !tx.categoryId &&
-        tx.status !== 'cancelled' &&
-        tx.category?.kind !== 'credit_card'
+      (tx) => !tx.categoryId && tx.category?.kind !== 'credit_card'
     );
 
     // Agrupa por categoria: regra do usuário tem prioridade; senão a heurística
@@ -507,7 +494,6 @@ export default function TransactionsPage() {
                       <th className="px-4 py-2.5 font-medium">Data</th>
                       <th className="px-4 py-2.5 font-medium">Descrição</th>
                       <th className="px-4 py-2.5 font-medium">Categoria</th>
-                      <th className="px-4 py-2.5 font-medium">Status</th>
                       <th className="px-4 py-2.5 text-right font-medium">Valor</th>
                       <th className="px-2 py-2.5" />
                     </tr>
@@ -563,13 +549,6 @@ export default function TransactionsPage() {
                             ) : (
                               <span className="text-brand-gray">—</span>
                             )}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle[tx.status]}`}
-                            >
-                              {TransactionStatusLabel[tx.status]}
-                            </span>
                           </td>
                           <td
                             className={`whitespace-nowrap px-4 py-2.5 text-right font-semibold ${
