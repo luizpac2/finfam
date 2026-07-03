@@ -149,8 +149,16 @@ export default function Import() {
       current.map((row, i) => {
         if (i !== index) return row;
         const next = { ...row, ...patch };
-        // Categorias são específicas por tipo: ao mudar o tipo, limpa a categoria.
-        if (patch.type && patch.type !== row.type) next.categoryId = '';
+        // Categorias são específicas por tipo: ao mudar o tipo, limpa a
+        // categoria — a menos que a própria mudança já defina uma categoria
+        // (ex.: escolher o tipo "Cartão de Crédito" já atribui o cartão).
+        if (
+          patch.type &&
+          patch.type !== row.type &&
+          patch.categoryId === undefined
+        ) {
+          next.categoryId = '';
+        }
         return next;
       })
     );

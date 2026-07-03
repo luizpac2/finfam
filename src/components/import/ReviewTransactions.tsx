@@ -76,6 +76,14 @@ export function ReviewTransactions({
     [categories]
   );
 
+  // Ids das categorias de cartão — usados para exibir "Cartão de Crédito" como
+  // uma opção na coluna Tipo (mesmo o lançamento sendo, no fundo, uma despesa).
+  const cardIds = useMemo(
+    () => new Set(optionsByKind.credit_card.map((o) => o.id)),
+    [optionsByKind]
+  );
+  const hasCards = optionsByKind.credit_card.length > 0;
+
   const stats = useMemo(() => {
     const included = rows.filter((row) => row.include);
     const categorized = rows.filter((row) => row.categoryId !== '').length;
@@ -181,7 +189,7 @@ export function ReviewTransactions({
                 </th>
                 <th className="w-[9.5rem] px-3 py-2 font-medium">Data</th>
                 <th className="px-3 py-2 font-medium">Descrição</th>
-                <th className="w-[8rem] px-3 py-2 font-medium">Tipo</th>
+                <th className="w-[11rem] px-3 py-2 font-medium">Tipo</th>
                 <th className="w-[17rem] px-3 py-2 font-medium">Categoria</th>
                 <th className="w-[8.5rem] px-3 py-2 text-right font-medium">Valor</th>
                 <th className="w-[3.5rem] px-2 py-2" />
@@ -256,22 +264,41 @@ export function ReviewTransactions({
                     </td>
                     <td className="px-3 py-1.5">
                       <select
-                        value={row.type}
+                        value={cardIds.has(row.categoryId) ? 'card' : row.type}
                         disabled={submitting}
-                        onChange={(e) =>
-                          onChangeRow(index, {
-                            type: e.target.value as TransactionType,
-                          })
-                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === 'card') {
+                            // "Cartão de Crédito": vira despesa e recebe a
+                            // categoria do cartão (mantém se já for um cartão).
+                            const cardId = cardIds.has(row.categoryId)
+                              ? row.categoryId
+                              : optionsByKind.credit_card[0]?.id ?? '';
+                            onChangeRow(index, {
+                              type: 'expense',
+                              categoryId: cardId,
+                            });
+                          } else {
+                            onChangeRow(index, {
+                              type: v as TransactionType,
+                              categoryId: '',
+                            });
+                          }
+                        }}
                         className={`${inputClass} ${
-                          row.type === 'income'
-                            ? 'text-brand-income'
-                            : 'text-brand-expense'
+                          cardIds.has(row.categoryId)
+                            ? 'text-brand-moss'
+                            : row.type === 'income'
+                              ? 'text-brand-income'
+                              : 'text-brand-expense'
                         }`}
                         aria-label="Tipo"
                       >
                         <option value="income">Receita</option>
                         <option value="expense">Despesa</option>
+                        {hasCards && (
+                          <option value="card">Cartão de Crédito</option>
+                        )}
                       </select>
                     </td>
                     <td className="px-3 py-1.5">
