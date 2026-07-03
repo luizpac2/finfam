@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('../pages/Dashboard'));
 const Import = lazy(() => import('../pages/Import'));
 const TransactionsPage = lazy(() => import('../pages/TransactionsPage'));
 const CategoriesPage = lazy(() => import('../pages/CategoriesPage'));
+const RulesPage = lazy(() => import('../pages/RulesPage'));
 const AdminDashboard = lazy(() => import('../pages/AdminDashboard'));
 const NeedInvitePage = lazy(() => import('../pages/NeedInvitePage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
@@ -40,6 +41,14 @@ export function AppRoutes() {
             element={
               <ProtectedRoute requireAdmin>
                 <CategoriesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/regras"
+            element={
+              <ProtectedRoute requireAdmin>
+                <RulesPage />
               </ProtectedRoute>
             }
           />

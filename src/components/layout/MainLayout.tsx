@@ -5,6 +5,7 @@ import {
   Upload,
   Receipt,
   Tags,
+  Filter,
   ShieldCheck,
   Menu,
   X,
@@ -49,6 +50,7 @@ export function MainLayout() {
     ...(isAdmin
       ? [
           { label: 'Categorias', to: '/categorias', icon: Tags },
+          { label: 'Regras', to: '/regras', icon: Filter },
           { label: 'Administração', to: '/admin', icon: ShieldCheck },
         ]
       : []),

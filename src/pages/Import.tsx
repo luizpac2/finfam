@@ -4,13 +4,19 @@ import { CreditCard } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { categoryService, transactionService } from '../services';
+import {
+  categoryRuleService,
+  categoryService,
+  transactionService,
+} from '../services';
 import type { Category } from '../domain/entities/Category';
+import type { CategoryRule } from '../domain/entities/CategoryRule';
 import { parseStatementFile } from '../lib/fileParser';
 import {
   isCardBillPayment,
   suggestCategoryId,
 } from '../domain/categorizationEngine';
+import { applyUserRules } from '../domain/ruleEngine';
 import {
   detectDuplicates,
   type DuplicateReason,
@@ -39,6 +45,7 @@ export default function Import() {
   const toast = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [rules, setRules] = useState<CategoryRule[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [step, setStep] = useState<Step>('upload');
   const [parsing, setParsing] = useState(false);
@@ -58,8 +65,14 @@ export default function Import() {
     let active = true;
     (async () => {
       try {
-        const list = await categoryService.list();
-        if (active) setCategories(list);
+        const [list, ruleList] = await Promise.all([
+          categoryService.list(),
+          categoryRuleService.list(),
+        ]);
+        if (active) {
+          setCategories(list);
+          setRules(ruleList);
+        }
       } catch {
         if (active) {
           toast.error('Não foi possível carregar as categorias.');
@@ -95,9 +108,12 @@ export default function Import() {
         }
       }
 
-      // Pré-categoriza cada linha; duplicatas entram desmarcadas.
+      // Pré-categoriza cada linha; duplicatas/ignoradas entram desmarcadas.
+      // Regras do usuário têm prioridade sobre a heurística.
       const reviewed: ReviewRow[] = parsed.map((tx, index) => {
         const duplicate = duplicates.get(index);
+        const rule = applyUserRules(tx.description, rules);
+        const ignored = rule.ignore || undefined;
 
         // Extrato de cartão: as compras (débitos) viram despesas ligadas ao
         // cartão. As entradas (créditos) podem ser o pagamento da própria fatura
@@ -111,20 +127,25 @@ export default function Import() {
             ...tx,
             categoryId: isCredit
               ? ''
-              : suggestCategoryId(tx.description, 'expense', categories),
+              : rule.categoryId ??
+                suggestCategoryId(tx.description, 'expense', categories),
             cardId: isPayment ? undefined : selectedCardId,
             cardPayment: isPayment || undefined,
             cardCredit: isRefund || undefined,
+            ignored,
             duplicate,
-            include: !isPayment && !duplicate,
+            include: !isPayment && !duplicate && !rule.ignore,
           };
         }
 
         return {
           ...tx,
-          categoryId: suggestCategoryId(tx.description, tx.type, categories),
+          categoryId:
+            rule.categoryId ??
+            suggestCategoryId(tx.description, tx.type, categories),
+          ignored,
           duplicate,
-          include: !duplicate,
+          include: !duplicate && !rule.ignore,
         };
       });
       setRows(reviewed);
@@ -161,6 +182,28 @@ export default function Import() {
         }
         return next;
       })
+    );
+  };
+
+  // Reaplica regras + heurística nas linhas SEM categoria (preserva escolhas).
+  const handleAutoCategorize = () => {
+    let filled = 0;
+    setRows((current) =>
+      current.map((row) => {
+        if (row.categoryId) return row;
+        const rule = applyUserRules(row.description, rules);
+        const categoryId =
+          rule.categoryId ??
+          suggestCategoryId(row.description, row.type, categories);
+        if (!categoryId) return row;
+        filled += 1;
+        return { ...row, categoryId };
+      })
+    );
+    toast.success(
+      filled > 0
+        ? `${filled} lançamento(s) categorizados.`
+        : 'Nada para categorizar automaticamente.'
     );
   };
 
@@ -298,6 +341,7 @@ export default function Import() {
           onChangeRow={handleChangeRow}
           onRemoveRow={handleRemoveRow}
           onSetAllIncluded={handleSetAllIncluded}
+          onAutoCategorize={handleAutoCategorize}
           onConfirm={handleConfirm}
           onCancel={reset}
         />

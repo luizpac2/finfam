@@ -11,6 +11,7 @@ export type UserStatus = 'invited' | 'active' | 'revoked';
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'pending' | 'paid' | 'cancelled';
 export type CategoryKind = 'income' | 'expense' | 'credit_card';
+export type RuleAction = 'categorize' | 'ignore';
 
 export interface Database {
   public: {
@@ -43,6 +44,36 @@ export interface Database {
           color?: string | null;
           kind?: CategoryKind;
           parent_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      category_rules: {
+        Row: {
+          id: string;
+          keyword: string;
+          action: RuleAction;
+          category_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          keyword: string;
+          action?: RuleAction;
+          category_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          keyword?: string;
+          action?: RuleAction;
+          category_id?: string | null;
+          created_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -156,6 +187,13 @@ export interface Database {
 export type CategoryRow = Database['public']['Tables']['categories']['Row'];
 export type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
 export type CategoryUpdate = Database['public']['Tables']['categories']['Update'];
+
+export type CategoryRuleRow =
+  Database['public']['Tables']['category_rules']['Row'];
+export type CategoryRuleInsert =
+  Database['public']['Tables']['category_rules']['Insert'];
+export type CategoryRuleUpdate =
+  Database['public']['Tables']['category_rules']['Update'];
 
 export type UserRow = Database['public']['Tables']['users']['Row'];
 export type UserInsert = Database['public']['Tables']['users']['Insert'];

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AlertTriangle, Loader2, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Loader2, Sparkles, Trash2, Wand2, X } from 'lucide-react';
 
 import type { ParsedTransaction } from '../../lib/fileParser';
 import {
@@ -25,6 +25,8 @@ export interface ReviewRow extends ParsedTransaction {
   cardPayment?: boolean;
   /** Crédito no cartão que NÃO é pagamento (estorno/reembolso) — mantido. */
   cardCredit?: boolean;
+  /** Casou com uma regra de "ignorar" — desmarcada por padrão. */
+  ignored?: boolean;
 }
 
 interface ReviewTransactionsProps {
@@ -34,6 +36,7 @@ interface ReviewTransactionsProps {
   onChangeRow: (index: number, patch: Partial<ReviewRow>) => void;
   onRemoveRow: (index: number) => void;
   onSetAllIncluded: (include: boolean) => void;
+  onAutoCategorize: () => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -58,6 +61,7 @@ export function ReviewTransactions({
   onChangeRow,
   onRemoveRow,
   onSetAllIncluded,
+  onAutoCategorize,
   onConfirm,
   onCancel,
 }: ReviewTransactionsProps) {
@@ -105,6 +109,7 @@ export function ReviewTransactions({
       duplicateCount: duplicates.length,
       existingDupes,
       cardPaymentCount: rows.filter((row) => row.cardPayment).length,
+      ignoredCount: rows.filter((row) => row.ignored).length,
       allExistingDupes:
         rows.length > 0 && existingDupes === rows.length,
       allIncluded: rows.length > 0 && included.length === rows.length,
@@ -123,7 +128,17 @@ export function ReviewTransactions({
             · {stats.categorized}/{rows.length} categorizadas
           </span>
         </div>
-        <div className="flex items-center gap-4 text-sm font-medium">
+        <div className="flex flex-wrap items-center gap-3 text-sm font-medium">
+          <button
+            type="button"
+            onClick={onAutoCategorize}
+            disabled={submitting}
+            title="Preenche as categorias vazias pelas regras e pela descrição"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-moss/25 px-3 py-1.5 text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
+          >
+            <Wand2 className="h-4 w-4" />
+            Categorizar automaticamente
+          </button>
           <span className="text-brand-income">
             {formatCurrencyAccounting(stats.income)}
           </span>
@@ -156,6 +171,15 @@ export function ReviewTransactions({
               caixa da linha se quiser importar mesmo assim.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Aviso: lançamentos ignorados por regra do usuário */}
+      {stats.ignoredCount > 0 && (
+        <div className="border-b border-brand-moss/10 bg-brand-light px-4 py-2.5 text-sm text-brand-gray">
+          {stats.ignoredCount} lançamento(s) desmarcados por uma{' '}
+          <strong className="text-brand-moss">regra de ignorar</strong>. Marque
+          a caixa se quiser importar mesmo assim.
         </div>
       )}
 
@@ -199,7 +223,7 @@ export function ReviewTransactions({
               {rows.map((row, index) => {
                 const selected = categoryById.get(row.categoryId);
                 const isDup = Boolean(row.duplicate);
-                const flagged = isDup || row.cardPayment;
+                const flagged = isDup || row.cardPayment || row.ignored;
                 return (
                   <tr
                     key={index}
@@ -235,6 +259,11 @@ export function ReviewTransactions({
                     </td>
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
+                        {row.ignored && (
+                          <span className="shrink-0 rounded-full bg-brand-gray/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-gray">
+                            Ignorado
+                          </span>
+                        )}
                         {row.cardPayment && (
                           <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                             Pgto fatura

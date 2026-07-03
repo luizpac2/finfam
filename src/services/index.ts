@@ -5,5 +5,6 @@
 export { authService } from './authService';
 export { userService } from './userService';
 export { categoryService } from './categoryService';
+export { categoryRuleService } from './categoryRuleService';
 export { transactionService } from './transactionService';
 export { ServiceError } from './serviceError';

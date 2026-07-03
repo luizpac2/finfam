@@ -3,12 +3,18 @@ import { Pencil, Plus, Search, Trash2, Wand2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { categoryService, transactionService } from '../services';
+import {
+  categoryRuleService,
+  categoryService,
+  transactionService,
+} from '../services';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
+import { applyUserRules } from '../domain/ruleEngine';
 import {
   buildCategoryOptions,
   type Category,
 } from '../domain/entities/Category';
+import type { CategoryRule } from '../domain/entities/CategoryRule';
 import type { Transaction } from '../domain/entities/Transaction';
 import type { TransactionStatus } from '../lib/database.types';
 import { TransactionStatusLabel } from '../domain/constants';
@@ -47,6 +53,7 @@ export default function TransactionsPage() {
     year: now.getFullYear(),
   });
   const [categories, setCategories] = useState<Category[]>([]);
+  const [rules, setRules] = useState<CategoryRule[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +77,12 @@ export default function TransactionsPage() {
   useEffect(() => {
     (async () => {
       try {
-        setCategories(await categoryService.list());
+        const [cats, ruleList] = await Promise.all([
+          categoryService.list(),
+          categoryRuleService.list(),
+        ]);
+        setCategories(cats);
+        setRules(ruleList);
       } catch {
         /* silencioso; o editor ainda funciona sem categorias */
       } finally {
@@ -257,10 +269,14 @@ export default function TransactionsPage() {
         tx.category?.kind !== 'credit_card'
     );
 
-    // Agrupa por categoria sugerida (só match real; ambíguos ficam de fora).
+    // Agrupa por categoria: regra do usuário tem prioridade; senão a heurística
+    // estrita (só match real; ambíguos ficam de fora).
     const groups = new Map<string, string[]>();
     for (const tx of targets) {
-      const catId = suggestCategoryIdStrict(tx.description, tx.type, categories);
+      const rule = applyUserRules(tx.description, rules);
+      const catId =
+        rule.categoryId ??
+        suggestCategoryIdStrict(tx.description, tx.type, categories);
       if (!catId) continue;
       const list = groups.get(catId) ?? [];
       list.push(tx.id);
