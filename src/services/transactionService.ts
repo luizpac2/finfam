@@ -145,14 +145,19 @@ export const transactionService = {
    * vez. Usado na edição em massa da página de Transações.
    */
   async setCategoryMany(ids: string[], categoryId: string | null): Promise<void> {
-    if (ids.length === 0) return;
-    unwrap(
-      await supabase
-        .from(TABLE)
-        .update({ category_id: categoryId })
-        .in('id', ids),
-      'atualizar as categorias'
-    );
+    // Atualiza em lotes para não estourar limites de URL/tamanho da query.
+    const CHUNK = 200;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK);
+      if (part.length === 0) continue;
+      unwrap(
+        await supabase
+          .from(TABLE)
+          .update({ category_id: categoryId })
+          .in('id', part),
+        'atualizar as categorias'
+      );
+    }
   },
 
   /** Remove várias transações de uma vez (edição em massa). */

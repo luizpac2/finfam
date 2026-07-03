@@ -5,11 +5,17 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { Ban, Loader2, Plus, Tag, Trash2 } from 'lucide-react';
+import { Ban, Loader2, Plus, RefreshCw, Tag, Trash2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { categoryRuleService, categoryService } from '../services';
+import {
+  categoryRuleService,
+  categoryService,
+  transactionService,
+} from '../services';
+import { normalizeText } from '../domain/categorizationEngine';
+import { applyUserRules } from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
 import type {
   CategoryRule,
@@ -37,6 +43,8 @@ export default function RulesPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [applyingAll, setApplyingAll] = useState(false);
 
   const [keyword, setKeyword] = useState('');
   const [action, setAction] = useState<RuleAction>('categorize');
@@ -92,6 +100,89 @@ export default function RulesPage() {
       toast.error(err instanceof Error ? err.message : 'Falha ao salvar.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Aplica UMA regra a todo o histórico: recategoriza os lançamentos (mesmo os
+  // já categorizados) cuja descrição contém a palavra da regra.
+  const applyRuleToHistory = async (rule: CategoryRule) => {
+    if (rule.action !== 'categorize' || !rule.categoryId) return;
+    const catName = categoryById.get(rule.categoryId)?.name ?? 'a categoria';
+    setApplyingId(rule.id);
+    try {
+      const all = await transactionService.list({});
+      const kw = normalizeText(rule.keyword);
+      const ids = all
+        .filter(
+          (tx) =>
+            tx.categoryId !== rule.categoryId &&
+            normalizeText(tx.description).includes(kw)
+        )
+        .map((tx) => tx.id);
+
+      if (ids.length === 0) {
+        toast.info('Nenhum lançamento do histórico para atualizar.');
+        return;
+      }
+      if (
+        !window.confirm(
+          `Recategorizar ${ids.length} lançamento(s) que contêm "${rule.keyword}" para "${catName}"? Isso vale para todo o histórico.`
+        )
+      )
+        return;
+
+      await transactionService.setCategoryMany(ids, rule.categoryId);
+      toast.success(`${ids.length} lançamento(s) recategorizados.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao aplicar a regra.');
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  // Aplica TODAS as regras de categorização ao histórico de uma vez.
+  const applyAllToHistory = async () => {
+    const hasCategorize = rules.some(
+      (r) => r.action === 'categorize' && r.categoryId
+    );
+    if (!hasCategorize) {
+      toast.info('Nenhuma regra de categorização para aplicar.');
+      return;
+    }
+    setApplyingAll(true);
+    try {
+      const all = await transactionService.list({});
+      const groups = new Map<string, string[]>();
+      for (const tx of all) {
+        const { categoryId } = applyUserRules(tx.description, rules);
+        if (!categoryId || tx.categoryId === categoryId) continue;
+        const list = groups.get(categoryId) ?? [];
+        list.push(tx.id);
+        groups.set(categoryId, list);
+      }
+
+      const total = [...groups.values()].reduce((n, ids) => n + ids.length, 0);
+      if (total === 0) {
+        toast.info('Nenhum lançamento do histórico para atualizar.');
+        return;
+      }
+      if (
+        !window.confirm(
+          `Aplicar todas as regras a ${total} lançamento(s) do histórico?`
+        )
+      )
+        return;
+
+      for (const [catId, ids] of groups) {
+        await transactionService.setCategoryMany(ids, catId);
+      }
+      toast.success(`${total} lançamento(s) recategorizados.`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Falha ao aplicar as regras.'
+      );
+    } finally {
+      setApplyingAll(false);
     }
   };
 
@@ -200,7 +291,29 @@ export default function RulesPage() {
 
       {/* Listas */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <RuleColumn title="Categorizar" icon={Tag} count={categorizeRules.length}>
+        <RuleColumn
+          title="Categorizar"
+          icon={Tag}
+          count={categorizeRules.length}
+          action={
+            categorizeRules.length > 0 && (
+              <button
+                type="button"
+                onClick={applyAllToHistory}
+                disabled={applyingAll || applyingId !== null}
+                title="Aplica todas as regras a todo o histórico de lançamentos"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-moss/25 px-2.5 py-1 text-xs font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {applyingAll ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Aplicar ao histórico
+              </button>
+            )
+          }
+        >
           {categorizeRules.length === 0 ? (
             <Empty text="Nenhuma regra de categorização ainda." />
           ) : (
@@ -214,6 +327,8 @@ export default function RulesPage() {
                   keyword={rule.keyword}
                   busy={busyId === rule.id}
                   onRemove={() => remove(rule)}
+                  onApply={() => applyRuleToHistory(rule)}
+                  applying={applyingId === rule.id}
                 >
                   <span className="inline-flex items-center gap-1.5 text-brand-moss">
                     <span
@@ -259,11 +374,13 @@ function RuleColumn({
   title,
   icon: Icon,
   count,
+  action,
   children,
 }: {
   title: string;
   icon: typeof Tag;
   count: number;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -272,6 +389,7 @@ function RuleColumn({
         <Icon className="h-4 w-4 text-brand-aqua" strokeWidth={1.8} />
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>
         <span className="text-sm text-brand-gray">({count})</span>
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       <Card className="overflow-hidden p-0">
         <ul className="divide-y divide-brand-moss/10">{children}</ul>
@@ -290,11 +408,15 @@ function RuleRow({
   keyword,
   busy,
   onRemove,
+  onApply,
+  applying = false,
   children,
 }: {
   keyword: string;
   busy: boolean;
   onRemove: () => void;
+  onApply?: () => void;
+  applying?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -306,19 +428,37 @@ function RuleRow({
         <span className="text-brand-gray">→</span>
         <span className="min-w-0 truncate">{children}</span>
       </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        disabled={busy}
-        className="shrink-0 rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-red-600 disabled:opacity-50"
-        aria-label={`Excluir regra ${keyword}`}
-      >
-        {busy ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Trash2 className="h-4 w-4" />
+      <div className="flex shrink-0 items-center gap-1">
+        {onApply && (
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={applying || busy}
+            title="Aplicar esta regra a todo o histórico"
+            className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss disabled:opacity-50"
+            aria-label={`Aplicar regra ${keyword} ao histórico`}
+          >
+            {applying ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </button>
         )}
-      </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={busy}
+          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-red-600 disabled:opacity-50"
+          aria-label={`Excluir regra ${keyword}`}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </button>
+      </div>
     </li>
   );
 }
