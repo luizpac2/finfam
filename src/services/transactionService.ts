@@ -100,6 +100,16 @@ export const transactionService = {
     );
   },
 
+  /** Retorna o conjunto de meses ("YYYY-MM") que possuem lançamentos. */
+  async monthsWithData(): Promise<Set<string>> {
+    const { data, error } = await supabase.rpc('months_with_transactions');
+    if (error) {
+      console.error('[service] Falha ao carregar meses com lançamentos:', error);
+      return new Set();
+    }
+    return new Set((data ?? []) as string[]);
+  },
+
   /** Busca uma transação por id (com categoria). */
   async getById(id: string): Promise<Transaction> {
     const row = unwrap(

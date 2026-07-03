@@ -50,13 +50,14 @@ export default function Dashboard() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  const [monthsWithData, setMonthsWithData] = useState<Set<string>>();
 
   const refDate = useMemo(
     () => new Date(period.year, period.month, 1),
     [period]
   );
 
-  // Categorias para o filtro lateral.
+  // Categorias + meses com lançamentos para o filtro lateral.
   useEffect(() => {
     let active = true;
     (async () => {
@@ -69,6 +70,9 @@ export default function Dashboard() {
         if (active) setLoadingCategories(false);
       }
     })();
+    transactionService.monthsWithData().then((s) => {
+      if (active) setMonthsWithData(s);
+    });
     return () => {
       active = false;
     };
@@ -152,6 +156,7 @@ export default function Dashboard() {
           selectedCategories={selectedCats}
           onCategoriesChange={setSelectedCats}
           loadingCategories={loadingCategories}
+          monthsWithData={monthsWithData}
         />
 
         <div className="space-y-6">

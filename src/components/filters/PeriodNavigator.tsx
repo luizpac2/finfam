@@ -18,12 +18,15 @@ const now = new Date();
 const CURRENT: Period = { month: now.getMonth(), year: now.getFullYear() };
 
 const toIndex = (p: Period) => p.year * 12 + p.month;
+const pad = (n: number) => String(n).padStart(2, '0');
 
 interface PeriodNavigatorProps {
   value: Period;
   onChange: (period: Period) => void;
   /** Impede navegar além deste mês (padrão: mês atual). */
   max?: Period;
+  /** Meses ("YYYY-MM") que têm lançamentos — os demais aparecem esmaecidos. */
+  monthsWithData?: Set<string>;
 }
 
 /**
@@ -35,6 +38,7 @@ export function PeriodNavigator({
   value,
   onChange,
   max = CURRENT,
+  monthsWithData,
 }: PeriodNavigatorProps) {
   const maxIndex = toIndex(max);
   const atMaxYear = value.year >= max.year;
@@ -76,19 +80,28 @@ export function PeriodNavigator({
         {MONTH_ABBR.map((name, index) => {
           const disabled = value.year * 12 + index > maxIndex;
           const active = value.month === index;
+          const hasData = monthsWithData?.has(`${value.year}-${pad(index + 1)}`);
+          // Mês sem lançamentos (conhecido) fica esmaecido; com dados ganha um ponto.
+          const empty = monthsWithData !== undefined && !hasData && !active;
           return (
             <button
               key={index}
               type="button"
               disabled={disabled}
               onClick={() => onChange({ year: value.year, month: index })}
-              className={`rounded-lg px-2 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-30 ${
+              title={empty && !disabled ? 'Sem lançamentos neste mês' : undefined}
+              className={`relative rounded-lg px-2 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-30 ${
                 active
                   ? 'bg-brand-aqua text-brand-moss shadow-sm'
-                  : 'text-brand-gray hover:bg-brand-light hover:text-brand-moss'
+                  : empty
+                    ? 'text-brand-gray/40 hover:bg-brand-light hover:text-brand-moss'
+                    : 'text-brand-gray hover:bg-brand-light hover:text-brand-moss'
               }`}
             >
               {name}
+              {hasData && !active && (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-brand-aqua" />
+              )}
             </button>
           );
         })}

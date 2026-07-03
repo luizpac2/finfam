@@ -54,6 +54,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [rules, setRules] = useState<CategoryRule[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [monthsWithData, setMonthsWithData] = useState<Set<string>>();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -115,6 +116,7 @@ export default function TransactionsPage() {
         setLoadingCategories(false);
       }
     })();
+    transactionService.monthsWithData().then(setMonthsWithData);
   }, []);
 
   const loadTransactions = useMemo(
@@ -358,6 +360,7 @@ export default function TransactionsPage() {
           selectedCategories={selectedCats}
           onCategoriesChange={setSelectedCats}
           loadingCategories={loadingCategories}
+          monthsWithData={monthsWithData}
         />
 
         <div className="min-w-0 space-y-4">

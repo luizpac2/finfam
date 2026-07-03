@@ -171,6 +171,10 @@ export interface Database {
         Args: Record<string, never>;
         Returns: boolean;
       };
+      months_with_transactions: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
     };
     Enums: {
       user_role: UserRole;

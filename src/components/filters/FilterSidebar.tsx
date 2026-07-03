@@ -11,6 +11,8 @@ interface FilterSidebarProps {
   selectedCategories: Set<string>;
   onCategoriesChange: (next: Set<string>) => void;
   loadingCategories?: boolean;
+  /** Meses ("YYYY-MM") que têm lançamentos. */
+  monthsWithData?: Set<string>;
   /** Conteúdo extra (ex.: totais) renderizado abaixo dos filtros. */
   children?: ReactNode;
 }
@@ -27,12 +29,17 @@ export function FilterSidebar({
   selectedCategories,
   onCategoriesChange,
   loadingCategories = false,
+  monthsWithData,
   children,
 }: FilterSidebarProps) {
   return (
     <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
       <FilterCard title="Período">
-        <PeriodNavigator value={period} onChange={onPeriodChange} />
+        <PeriodNavigator
+          value={period}
+          onChange={onPeriodChange}
+          monthsWithData={monthsWithData}
+        />
       </FilterCard>
 
       <FilterCard title="Categorias">
