@@ -7,6 +7,7 @@ import {
   type Category,
 } from '../../domain/entities/Category';
 import type { DuplicateReason } from '../../domain/duplicateDetection';
+import { isCardRefund } from '../../domain/categorizationEngine';
 import type { TransactionType } from '../../lib/database.types';
 import { formatCurrencyAccounting } from '../../lib/format';
 import { CategoryIcon } from '../../lib/categoryIcons';
@@ -232,7 +233,7 @@ export function ReviewTransactions({
                         )}
                         {row.cardCredit && (
                           <span className="shrink-0 rounded-full bg-brand-aqua/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-moss">
-                            Crédito
+                            {isCardRefund(row.description) ? 'Estorno' : 'Crédito'}
                           </span>
                         )}
                         {isDup && (

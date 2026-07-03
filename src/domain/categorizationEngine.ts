@@ -234,6 +234,133 @@ export const CATEGORY_RULES: CategoryRule[] = [
       'CLUBE',
     ],
   },
+  // ---------------------------------------------------------------------------
+  // Regras complementares (mais comércios/serviços comuns no Brasil).
+  // Ficam depois das regras acima e antes da genérica de Transferências.
+  // ---------------------------------------------------------------------------
+  {
+    category: 'Alimentação',
+    keywords: [
+      'ATACADAO',
+      'ASSAI',
+      'CARREFOUR',
+      'PAO DE ACUCAR',
+      'EXTRA ',
+      'SENDAS',
+      'PREZUNIC',
+      'GUANABARA',
+      'OBA HORTI',
+      'SWIFT',
+      'OUTBACK',
+      'HABIBS',
+      'SPOLETO',
+      'STARBUCKS',
+      'CACAU SHOW',
+      'KOPENHAGEN',
+      'GIRAFFAS',
+      'BOB S',
+      'CHINA IN BOX',
+      'PADOCA',
+      'CONFEITARIA',
+      'DELICATESSEN',
+    ],
+  },
+  {
+    category: 'Transporte',
+    keywords: ['INDRIVE', 'MOBIBUS', 'RECARGA BILHETE', 'ITAU BUS'],
+  },
+  {
+    category: 'Compras',
+    keywords: [
+      'CASAS BAHIA',
+      'PONTO FRIO',
+      'FAST SHOP',
+      'LEROY',
+      'TELHANORTE',
+      'KABUM',
+      'PICHAU',
+      'TERABYTE',
+      'NETSHOES',
+      'CENTAURO',
+      'DAFITI',
+      'NIKE',
+      'ADIDAS',
+      'MARISA',
+      'PERNAMBUCANAS',
+      'IKESAKI',
+      'SEPHORA',
+      'BOTICARIO',
+      'NATURA',
+      'AVON',
+    ],
+  },
+  {
+    category: 'Saúde',
+    keywords: [
+      'PACHECO',
+      'PAGUE MENOS',
+      'SAO JOAO',
+      'ULTRAFARMA',
+      'PANVEL',
+      'NISSEI',
+      'FARMACIAS',
+      'ODONTO',
+      'FISIO',
+      'OTICA',
+    ],
+  },
+  {
+    category: 'Contas/Serviços',
+    keywords: [
+      'GOOGLE',
+      'MICROSOFT',
+      'ADOBE',
+      'OPENAI',
+      'CHATGPT',
+      'AWS',
+      'AMAZON WEB',
+      'DIGITALOCEAN',
+      'CLOUDFLARE',
+      'GODADDY',
+      'HOSTGATOR',
+      'DROPBOX',
+      'LINKEDIN',
+      'CANVA',
+      'NOTION',
+      'GITHUB',
+    ],
+  },
+  {
+    category: 'Lazer',
+    keywords: [
+      'CINEMARK',
+      'KINOPLEX',
+      'UCI ',
+      'SYMPLA',
+      'EVENTIM',
+      'TICKET360',
+      'TWITCH',
+      'PATREON',
+      'PARQUE',
+      'ZOOLOGICO',
+      'BOLICHE',
+    ],
+  },
+  {
+    category: 'Educação',
+    keywords: [
+      'HOTMART',
+      'COURSERA',
+      'DUOLINGO',
+      'ROSETTA',
+      'DOMESTIKA',
+      'KUMON',
+      'WIZARD',
+      'CNA ',
+      'FISK',
+      'PAPELARIA',
+    ],
+  },
   {
     // Genérica — fica por último para não "roubar" merchants específicos.
     category: 'Transferências',
@@ -263,6 +390,22 @@ const CARD_PAYMENT_KEYWORDS = [
   'PGTO',
   'PAG FATURA',
   'PAG. FATURA',
+  'DEB AUTOM',
+  'DEBITO AUTOM',
+  'DEB CONTA',
+  'DEBITO CONTA',
+  'DEB EM CTA',
+  'DEBITO EM CONTA',
+  'PAG DEB',
+];
+
+/** Palavras-chave de estorno/reembolso (crédito que NÃO é pagamento). */
+const CARD_REFUND_KEYWORDS = [
+  'ESTORNO',
+  'DEVOLUCAO',
+  'REEMBOLSO',
+  'CANCELAMENTO',
+  'CHARGEBACK',
 ];
 
 /**
@@ -273,6 +416,13 @@ export const isCardBillPayment = (description: string): boolean => {
   const text = normalizeText(description);
   if (!text) return false;
   return CARD_PAYMENT_KEYWORDS.some((keyword) => text.includes(keyword));
+};
+
+/** Indica se a descrição parece um estorno/reembolso (crédito mantido). */
+export const isCardRefund = (description: string): boolean => {
+  const text = normalizeText(description);
+  if (!text) return false;
+  return CARD_REFUND_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 
 /**
@@ -318,4 +468,22 @@ export const suggestCategoryId = (
   }
 
   return findByName(FALLBACK_CATEGORY)?.id ?? '';
+};
+
+/**
+ * Como {@link suggestCategoryId}, porém SEM o fallback para "Outros": retorna
+ * `''` quando nenhuma regra casa. Usado na categorização automática em massa,
+ * para não rotular indevidamente lançamentos ambíguos.
+ */
+export const suggestCategoryIdStrict = (
+  description: string,
+  type: TransactionType,
+  categories: Category[]
+): string => {
+  const suggested = suggestCategoryName(description, type);
+  if (!suggested) return '';
+  const match = categories.find(
+    (c) => c.kind === type && normalizeText(c.name) === normalizeText(suggested)
+  );
+  return match?.id ?? '';
 };

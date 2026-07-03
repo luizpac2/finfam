@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2, Wand2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { categoryService, transactionService } from '../services';
+import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import {
   buildCategoryOptions,
   type Category,
@@ -63,6 +64,7 @@ export default function TransactionsPage() {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoCategorizing, setAutoCategorizing] = useState(false);
 
   // Categorias (para o filtro lateral, os dropdowns do editor e a edição em massa).
   useEffect(() => {
@@ -245,6 +247,46 @@ export default function TransactionsPage() {
     }
   };
 
+  const handleAutoCategorize = async () => {
+    // Alvos: lançamentos sem categoria (ignora cancelados e pagamentos de
+    // fatura, que já têm a categoria do cartão).
+    const targets = transactions.filter(
+      (tx) =>
+        !tx.categoryId &&
+        tx.status !== 'cancelled' &&
+        tx.category?.kind !== 'credit_card'
+    );
+
+    // Agrupa por categoria sugerida (só match real; ambíguos ficam de fora).
+    const groups = new Map<string, string[]>();
+    for (const tx of targets) {
+      const catId = suggestCategoryIdStrict(tx.description, tx.type, categories);
+      if (!catId) continue;
+      const list = groups.get(catId) ?? [];
+      list.push(tx.id);
+      groups.set(catId, list);
+    }
+
+    const total = [...groups.values()].reduce((n, ids) => n + ids.length, 0);
+    if (total === 0) {
+      toast.info('Nenhum lançamento novo para categorizar neste período.');
+      return;
+    }
+
+    setAutoCategorizing(true);
+    try {
+      for (const [catId, ids] of groups) {
+        await transactionService.setCategoryMany(ids, catId);
+      }
+      toast.success(`${total} lançamento(s) categorizados automaticamente.`);
+      await loadTransactions(period);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao categorizar.');
+    } finally {
+      setAutoCategorizing(false);
+    }
+  };
+
   const bulkDelete = async () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
@@ -321,14 +363,26 @@ export default function TransactionsPage() {
                 ))}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={openNew}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-aqua px-4 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95"
-            >
-              <Plus className="h-4 w-4" />
-              Novo lançamento
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAutoCategorize}
+                disabled={autoCategorizing || loading}
+                title="Preenche a categoria dos lançamentos sem categoria pela descrição"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-moss/25 px-4 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Wand2 className="h-4 w-4" />
+                {autoCategorizing ? 'Categorizando…' : 'Categorizar automaticamente'}
+              </button>
+              <button
+                type="button"
+                onClick={openNew}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-aqua px-4 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95"
+              >
+                <Plus className="h-4 w-4" />
+                Novo lançamento
+              </button>
+            </div>
           </div>
 
           {/* Totais do período/filtro */}
