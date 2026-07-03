@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { Loader2, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Loader2, Sparkles, Trash2, X } from 'lucide-react';
 
 import type { ParsedTransaction } from '../../lib/fileParser';
 import {
   buildCategoryOptions,
   type Category,
 } from '../../domain/entities/Category';
+import type { DuplicateReason } from '../../domain/duplicateDetection';
 import type { TransactionType } from '../../lib/database.types';
 import { formatCurrencyAccounting } from '../../lib/format';
 import { CategoryIcon } from '../../lib/categoryIcons';
@@ -13,6 +14,10 @@ import { CategoryIcon } from '../../lib/categoryIcons';
 /** Linha em revisão: transação importada + categoria escolhida (id ou ''). */
 export interface ReviewRow extends ParsedTransaction {
   categoryId: string;
+  /** Se será realmente importada (duplicatas vêm desmarcadas por padrão). */
+  include: boolean;
+  /** Preenchido quando a linha parece duplicada. */
+  duplicate?: DuplicateReason;
 }
 
 interface ReviewTransactionsProps {
@@ -21,9 +26,15 @@ interface ReviewTransactionsProps {
   submitting: boolean;
   onChangeRow: (index: number, patch: Partial<ReviewRow>) => void;
   onRemoveRow: (index: number) => void;
+  onSetAllIncluded: (include: boolean) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
+
+const duplicateBadge: Record<DuplicateReason, string> = {
+  existing: 'Já existe',
+  file: 'Repetido',
+};
 
 const inputClass =
   'w-full rounded-lg border border-brand-moss/25 bg-white px-2 py-1.5 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
@@ -39,6 +50,7 @@ export function ReviewTransactions({
   submitting,
   onChangeRow,
   onRemoveRow,
+  onSetAllIncluded,
   onConfirm,
   onCancel,
 }: ReviewTransactionsProps) {
@@ -57,8 +69,13 @@ export function ReviewTransactions({
   );
 
   const stats = useMemo(() => {
+    const included = rows.filter((row) => row.include);
     const categorized = rows.filter((row) => row.categoryId !== '').length;
-    const totals = rows.reduce(
+    const duplicates = rows.filter((row) => row.duplicate);
+    const existingDupes = duplicates.filter(
+      (row) => row.duplicate === 'existing'
+    ).length;
+    const totals = included.reduce(
       (acc, row) => {
         if (row.type === 'income') acc.income += row.amount;
         else acc.expense += row.amount;
@@ -66,7 +83,16 @@ export function ReviewTransactions({
       },
       { income: 0, expense: 0 }
     );
-    return { categorized, ...totals };
+    return {
+      categorized,
+      includedCount: included.length,
+      duplicateCount: duplicates.length,
+      existingDupes,
+      allExistingDupes:
+        rows.length > 0 && existingDupes === rows.length,
+      allIncluded: rows.length > 0 && included.length === rows.length,
+      ...totals,
+    };
   }, [rows]);
 
   return (
@@ -90,6 +116,32 @@ export function ReviewTransactions({
         </div>
       </div>
 
+      {/* Alerta de duplicatas */}
+      {stats.duplicateCount > 0 && (
+        <div className="flex items-start gap-3 border-b border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" strokeWidth={1.8} />
+          <div>
+            {stats.allExistingDupes ? (
+              <p className="font-semibold">
+                Este extrato parece já ter sido importado: todos os{' '}
+                {rows.length} lançamentos já existem neste mês.
+              </p>
+            ) : (
+              <p className="font-semibold">
+                {stats.duplicateCount} lançamento(s) parecem duplicados
+                {stats.existingDupes > 0 &&
+                  ` (${stats.existingDupes} já existem neste mês)`}
+                .
+              </p>
+            )}
+            <p className="mt-0.5 text-amber-700">
+              Eles vêm <strong>desmarcados</strong> por segurança. Marque a
+              caixa da linha se quiser importar mesmo assim.
+            </p>
+          </div>
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-brand-gray">
           Nenhuma linha para importar. Cancele para começar de novo.
@@ -99,6 +151,16 @@ export function ReviewTransactions({
           <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-brand-light text-xs uppercase tracking-wide text-brand-gray">
               <tr>
+                <th className="w-[2.5rem] px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={stats.allIncluded}
+                    onChange={(e) => onSetAllIncluded(e.target.checked)}
+                    disabled={submitting}
+                    className="h-4 w-4 cursor-pointer accent-brand-aqua"
+                    aria-label="Incluir todos"
+                  />
+                </th>
                 <th className="w-[9.5rem] px-3 py-2 font-medium">Data</th>
                 <th className="px-3 py-2 font-medium">Descrição</th>
                 <th className="w-[8rem] px-3 py-2 font-medium">Tipo</th>
@@ -110,8 +172,28 @@ export function ReviewTransactions({
             <tbody className="divide-y divide-brand-moss/10">
               {rows.map((row, index) => {
                 const selected = categoryById.get(row.categoryId);
+                const isDup = Boolean(row.duplicate);
                 return (
-                  <tr key={index} className="hover:bg-brand-light/50">
+                  <tr
+                    key={index}
+                    className={
+                      isDup
+                        ? 'bg-amber-50/70 hover:bg-amber-50'
+                        : 'hover:bg-brand-light/50'
+                    }
+                  >
+                    <td className="px-2 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={row.include}
+                        disabled={submitting}
+                        onChange={(e) =>
+                          onChangeRow(index, { include: e.target.checked })
+                        }
+                        className="h-4 w-4 cursor-pointer accent-brand-aqua"
+                        aria-label="Incluir na importação"
+                      />
+                    </td>
                     <td className="px-3 py-1.5">
                       <input
                         type="date"
@@ -125,16 +207,23 @@ export function ReviewTransactions({
                       />
                     </td>
                     <td className="px-3 py-1.5">
-                      <input
-                        type="text"
-                        value={row.description}
-                        disabled={submitting}
-                        onChange={(e) =>
-                          onChangeRow(index, { description: e.target.value })
-                        }
-                        className={inputClass}
-                        aria-label="Descrição"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {isDup && (
+                          <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                            {duplicateBadge[row.duplicate!]}
+                          </span>
+                        )}
+                        <input
+                          type="text"
+                          value={row.description}
+                          disabled={submitting}
+                          onChange={(e) =>
+                            onChangeRow(index, { description: e.target.value })
+                          }
+                          className={inputClass}
+                          aria-label="Descrição"
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-1.5">
                       <select
@@ -241,11 +330,13 @@ export function ReviewTransactions({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={submitting || rows.length === 0}
+          disabled={submitting || stats.includedCount === 0}
           className="inline-flex items-center gap-2 rounded-xl bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          {submitting ? 'Importando…' : `Confirmar importação (${rows.length})`}
+          {submitting
+            ? 'Importando…'
+            : `Confirmar importação (${stats.includedCount})`}
         </button>
       </div>
     </section>

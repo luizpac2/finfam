@@ -6,6 +6,10 @@ import { categoryService, transactionService } from '../services';
 import type { Category } from '../domain/entities/Category';
 import { parseStatementFile } from '../lib/fileParser';
 import { suggestCategoryId } from '../domain/categorizationEngine';
+import {
+  detectDuplicates,
+  type DuplicateReason,
+} from '../domain/duplicateDetection';
 import { DragAndDropZone } from '../components/import/DragAndDropZone';
 import {
   ReviewTransactions,
@@ -13,6 +17,10 @@ import {
 } from '../components/import/ReviewTransactions';
 
 type Step = 'upload' | 'review';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const isoDate = (d: Date) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 /**
  * Fluxo de importação de extratos:
@@ -53,14 +61,44 @@ export default function Import() {
     setParsing(true);
     try {
       const parsed = await parseStatementFile(file);
-      // Pré-categoriza cada linha com a heurística.
-      const reviewed: ReviewRow[] = parsed.map((tx) => ({
-        ...tx,
-        categoryId: suggestCategoryId(tx.description, tx.type, categories),
-      }));
+
+      // Detecta duplicatas contra o que já está salvo nos meses do extrato
+      // (extrato repetido / lançamentos repetidos no mesmo mês).
+      let duplicates = new Map<number, DuplicateReason>();
+      if (parsed.length > 0) {
+        const dates = parsed.map((p) => p.date).sort();
+        const from = `${dates[0].slice(0, 7)}-01`;
+        const [ly, lm] = dates[dates.length - 1]
+          .slice(0, 7)
+          .split('-')
+          .map(Number);
+        const to = isoDate(new Date(ly, lm, 0)); // último dia do último mês
+        try {
+          const existing = await transactionService.list({ from, to });
+          duplicates = detectDuplicates(parsed, existing);
+        } catch {
+          /* se a checagem falhar, seguimos sem bloquear a importação */
+        }
+      }
+
+      // Pré-categoriza cada linha; duplicatas entram desmarcadas.
+      const reviewed: ReviewRow[] = parsed.map((tx, index) => {
+        const duplicate = duplicates.get(index);
+        return {
+          ...tx,
+          categoryId: suggestCategoryId(tx.description, tx.type, categories),
+          duplicate,
+          include: !duplicate,
+        };
+      });
       setRows(reviewed);
       setStep('review');
-      toast.success(`${parsed.length} lançamento(s) lido(s) de "${file.name}".`);
+
+      const dupCount = duplicates.size;
+      toast.success(
+        `${parsed.length} lançamento(s) lido(s) de "${file.name}".` +
+          (dupCount > 0 ? ` ${dupCount} possível(is) duplicata(s).` : '')
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Não foi possível ler o arquivo.'
@@ -86,17 +124,23 @@ export default function Import() {
     setRows((current) => current.filter((_, i) => i !== index));
   };
 
+  const handleSetAllIncluded = (include: boolean) => {
+    setRows((current) => current.map((row) => ({ ...row, include })));
+  };
+
   const reset = () => {
     setRows([]);
     setStep('upload');
   };
 
   const handleConfirm = async () => {
-    if (!profile || rows.length === 0) return;
+    if (!profile) return;
+    const toImport = rows.filter((row) => row.include);
+    if (toImport.length === 0) return;
     setImporting(true);
     try {
       const count = await transactionService.createMany(
-        rows.map((row) => ({
+        toImport.map((row) => ({
           date: row.date,
           description: row.description,
           amount: row.amount,
@@ -140,6 +184,7 @@ export default function Import() {
           submitting={importing}
           onChangeRow={handleChangeRow}
           onRemoveRow={handleRemoveRow}
+          onSetAllIncluded={handleSetAllIncluded}
           onConfirm={handleConfirm}
           onCancel={reset}
         />
