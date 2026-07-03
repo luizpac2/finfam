@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Modal } from '../ui/Modal';
@@ -49,6 +49,33 @@ export function TransactionEditor({
     categoryId: initial?.categoryId ?? '',
     status: (initial?.status ?? 'pending') as TransactionStatus,
   }));
+
+  // Cartões (categorias tipo credit_card) — para oferecer "Cartão" no seletor
+  // de Tipo. Marcar como Cartão = despesa cuja categoria é o cartão.
+  const cardIds = useMemo(
+    () => new Set(categories.filter((c) => c.kind === 'credit_card').map((c) => c.id)),
+    [categories]
+  );
+  const firstCardId = useMemo(
+    () => categories.find((c) => c.kind === 'credit_card')?.id ?? '',
+    [categories]
+  );
+  const hasCards = cardIds.size > 0;
+  const activeTipo: 'income' | 'expense' | 'card' = cardIds.has(form.categoryId)
+    ? 'card'
+    : form.type;
+
+  const setTipo = (v: 'income' | 'expense' | 'card') => {
+    if (v === 'card') {
+      setForm((f) => ({
+        ...f,
+        type: 'expense',
+        categoryId: cardIds.has(f.categoryId) ? f.categoryId : firstCardId,
+      }));
+    } else {
+      setForm((f) => ({ ...f, type: v, categoryId: '' }));
+    }
+  };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -125,23 +152,31 @@ export function TransactionEditor({
           <span className="mb-1 block text-sm font-medium text-brand-moss">
             Tipo
           </span>
-          <div className="grid grid-cols-2 gap-1 rounded-lg bg-brand-light p-1">
-            {(['income', 'expense'] as TransactionType[]).map((k) => (
+          <div
+            className={`grid gap-1 rounded-lg bg-brand-light p-1 ${
+              hasCards ? 'grid-cols-3' : 'grid-cols-2'
+            }`}
+          >
+            {(
+              [
+                ['income', 'Receita', 'text-brand-income'],
+                ['expense', 'Despesa', 'text-brand-expense'],
+                ...(hasCards
+                  ? [['card', 'Cartão', 'text-brand-moss'] as const]
+                  : []),
+              ] as [typeof activeTipo, string, string][]
+            ).map(([value, label, activeColor]) => (
               <button
-                key={k}
+                key={value}
                 type="button"
-                onClick={() =>
-                  setForm((f) => ({ ...f, type: k, categoryId: '' }))
-                }
-                className={`rounded-md py-1.5 text-sm font-medium transition ${
-                  form.type === k
-                    ? k === 'income'
-                      ? 'bg-white text-brand-income shadow-sm'
-                      : 'bg-white text-brand-expense shadow-sm'
+                onClick={() => setTipo(value)}
+                className={`rounded-md px-1 py-1.5 text-sm font-medium transition ${
+                  activeTipo === value
+                    ? `bg-white shadow-sm ${activeColor}`
                     : 'text-brand-gray'
                 }`}
               >
-                {k === 'income' ? 'Receita' : 'Despesa'}
+                {label}
               </button>
             ))}
           </div>
