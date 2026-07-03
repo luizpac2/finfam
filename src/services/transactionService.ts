@@ -36,6 +36,17 @@ export interface FinancialSummary {
   balance: number;
 }
 
+/** Converte um termo numérico ("12,50", "12.50", "1234") em número, ou null. */
+const parseSearchAmount = (raw: string): number | null => {
+  const cleaned = raw.replace(/[^\d.,-]/g, '').trim();
+  if (!cleaned) return null;
+  const normalized = cleaned.includes(',')
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : cleaned;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? Math.abs(n) : null;
+};
+
 export const transactionService = {
   /** Lista transações com filtros opcionais, ordenadas pela data (desc). */
   async list(filters: TransactionFilters = {}): Promise<Transaction[]> {
@@ -51,6 +62,39 @@ export const transactionService = {
     if (filters.to) query = query.lte('date', filters.to);
 
     const rows = unwrap(await query, 'listar as transações');
+    return (rows as unknown as TransactionRowWithCategory[]).map(
+      mapToTransaction
+    );
+  },
+
+  /**
+   * Busca inteligente de lançamentos por descrição e/ou valor.
+   * Se o termo for numérico, também casa pelo valor exato.
+   */
+  async search(term: string): Promise<Transaction[]> {
+    const t = term.trim();
+    if (t.length < 2) return [];
+
+    // Sanitiza caracteres que quebram a sintaxe do filtro `or` do PostgREST.
+    const safe = t.replace(/[,().*%]/g, ' ').trim();
+    // Valor: só quando o termo não tem letras (senão é busca por descrição).
+    const hasLetters = /[a-zA-ZÀ-ÿ]/.test(t);
+    const num = hasLetters ? null : parseSearchAmount(t);
+
+    const filters: string[] = [];
+    if (safe) filters.push(`description.ilike.*${safe}*`);
+    if (num !== null) filters.push(`amount.eq.${num}`);
+    if (filters.length === 0) return [];
+
+    const rows = unwrap(
+      await supabase
+        .from(TABLE)
+        .select(SELECT_WITH_CATEGORY)
+        .or(filters.join(','))
+        .order('date', { ascending: false })
+        .limit(25),
+      'buscar os lançamentos'
+    );
     return (rows as unknown as TransactionRowWithCategory[]).map(
       mapToTransaction
     );

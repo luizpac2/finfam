@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, Search, Trash2, Wand2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
@@ -70,6 +71,33 @@ export default function TransactionsPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoCategorizing, setAutoCategorizing] = useState(false);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Abre o editor quando chega da busca global (?tx=<id>).
+  useEffect(() => {
+    const txId = searchParams.get('tx');
+    if (!txId) return;
+    let active = true;
+    (async () => {
+      try {
+        const tx = await transactionService.getById(txId);
+        if (active) {
+          setEditing(tx);
+          setEditorOpen(true);
+        }
+      } catch {
+        if (active) toast.error('Lançamento não encontrado.');
+      } finally {
+        const next = new URLSearchParams(searchParams);
+        next.delete('tx');
+        setSearchParams(next, { replace: true });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [searchParams, setSearchParams, toast]);
 
   // Categorias (para o filtro lateral, os dropdowns do editor e a edição em massa).
   useEffect(() => {
