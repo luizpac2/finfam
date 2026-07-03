@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
   Upload,
+  Receipt,
   Tags,
   ShieldCheck,
   Menu,
@@ -43,6 +44,7 @@ export function MainLayout() {
 
   const items: NavItem[] = [
     { label: 'Visão geral', to: '/', icon: LayoutDashboard },
+    { label: 'Transações', to: '/transacoes', icon: Receipt },
     { label: 'Importar', to: '/importar', icon: Upload },
     ...(isAdmin
       ? [
