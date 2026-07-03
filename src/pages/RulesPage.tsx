@@ -10,15 +10,13 @@ import { Ban, Loader2, Plus, Tag, Trash2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { categoryRuleService, categoryService } from '../services';
-import {
-  buildCategoryOptions,
-  type Category,
-} from '../domain/entities/Category';
+import type { Category } from '../domain/entities/Category';
 import type {
   CategoryRule,
   RuleAction,
 } from '../domain/entities/CategoryRule';
 import { Card } from '../components/ui/Card';
+import { CategorySelect } from '../components/ui/CategorySelect';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
 import { CategoryIcon } from '../lib/categoryIcons';
 
@@ -69,11 +67,6 @@ export default function RulesPage() {
     for (const c of categories) map.set(c.id, c);
     return map;
   }, [categories]);
-
-  const categoryOptions = useMemo(
-    () => buildCategoryOptions(categories),
-    [categories]
-  );
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -177,21 +170,14 @@ export default function RulesPage() {
               <span className="mb-1 block text-sm font-medium text-brand-moss">
                 Categoria
               </span>
-              <select
+              <CategorySelect
                 value={categoryId}
+                onChange={setCategoryId}
+                categories={categories}
                 disabled={action === 'ignore'}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className={`${inputClass} disabled:opacity-50`}
-              >
-                <option value="">
-                  {action === 'ignore' ? '— (ignorar)' : 'Selecione…'}
-                </option>
-                {categoryOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                placeholder={action === 'ignore' ? '— (ignorar)' : 'Selecione…'}
+                className="py-2"
+              />
             </label>
           </div>
 

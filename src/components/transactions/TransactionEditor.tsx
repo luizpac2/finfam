@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Modal } from '../ui/Modal';
-import { buildCategoryOptions, type Category } from '../../domain/entities/Category';
+import { CategorySelect } from '../ui/CategorySelect';
+import type { Category } from '../../domain/entities/Category';
 import type { Transaction } from '../../domain/entities/Transaction';
 import type {
   TransactionStatus,
@@ -48,12 +49,6 @@ export function TransactionEditor({
     categoryId: initial?.categoryId ?? '',
     status: (initial?.status ?? 'pending') as TransactionStatus,
   }));
-
-  // Para despesas, além das categorias de despesa, oferecemos os cartões — assim
-  // o pagamento da fatura (no extrato do banco) pode ser marcado como "Cartão".
-  const expenseOptions = buildCategoryOptions(categories, 'expense');
-  const incomeOptions = buildCategoryOptions(categories, 'income');
-  const cardOptions = buildCategoryOptions(categories, 'credit_card');
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -157,41 +152,17 @@ export function TransactionEditor({
             <span className="mb-1 block text-sm font-medium text-brand-moss">
               Categoria
             </span>
-            <select
+            <CategorySelect
               value={form.categoryId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, categoryId: e.target.value }))
+              onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
+              categories={categories}
+              kinds={
+                form.type === 'income' ? ['income'] : ['expense', 'credit_card']
               }
-              className={inputClass}
-            >
-              <option value="">Sem categoria</option>
-              {form.type === 'income'
-                ? incomeOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))
-                : (
-                    <>
-                      <optgroup label="Despesas">
-                        {expenseOptions.map((opt) => (
-                          <option key={opt.id} value={opt.id}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                      {cardOptions.length > 0 && (
-                        <optgroup label="Cartão de Crédito (pagamento de fatura)">
-                          {cardOptions.map((opt) => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </>
-                  )}
-            </select>
+              emptyOption={{ value: '', label: 'Sem categoria' }}
+              placeholder="Sem categoria"
+              className="py-2"
+            />
           </label>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-brand-moss">

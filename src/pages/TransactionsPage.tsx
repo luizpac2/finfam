@@ -10,10 +10,7 @@ import {
 } from '../services';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import { applyUserRules } from '../domain/ruleEngine';
-import {
-  buildCategoryOptions,
-  type Category,
-} from '../domain/entities/Category';
+import type { Category } from '../domain/entities/Category';
 import type { CategoryRule } from '../domain/entities/CategoryRule';
 import type { Transaction } from '../domain/entities/Transaction';
 import type { TransactionStatus } from '../lib/database.types';
@@ -26,6 +23,7 @@ import {
   type TransactionFormValues,
 } from '../components/transactions/TransactionEditor';
 import { Card } from '../components/ui/Card';
+import { CategorySelect } from '../components/ui/CategorySelect';
 import { CategoryIcon } from '../lib/categoryIcons';
 import { formatCurrencyAccounting, formatDate } from '../lib/format';
 
@@ -116,11 +114,6 @@ export default function TransactionsPage() {
     for (const c of categories) map.set(c.id, c);
     return map;
   }, [categories]);
-
-  const categoryOptions = useMemo(
-    () => buildCategoryOptions(categories),
-    [categories]
-  );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -318,9 +311,6 @@ export default function TransactionsPage() {
     }
   };
 
-  const selectClass =
-    'rounded-lg border border-brand-moss/25 bg-white px-2.5 py-1.5 text-sm font-medium text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
-
   return (
     <div className="space-y-6">
       <header>
@@ -421,22 +411,16 @@ export default function TransactionsPage() {
                 {selectedIds.size} selecionada(s)
               </span>
               <div className="flex flex-1 flex-wrap items-center gap-2">
-                <select
-                  value={bulkCategory}
-                  onChange={(e) => setBulkCategory(e.target.value)}
-                  className={selectClass}
-                  aria-label="Nova categoria para os selecionados"
-                >
-                  <option value="" disabled>
-                    Mudar categoria para…
-                  </option>
-                  <option value={UNCATEGORIZED}>Sem categoria</option>
-                  {categoryOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full sm:w-64">
+                  <CategorySelect
+                    value={bulkCategory}
+                    onChange={setBulkCategory}
+                    categories={categories}
+                    emptyOption={{ value: UNCATEGORIZED, label: 'Sem categoria' }}
+                    placeholder="Mudar categoria para…"
+                    ariaLabel="Nova categoria para os selecionados"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={applyBulkCategory}

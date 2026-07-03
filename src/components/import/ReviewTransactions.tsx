@@ -10,7 +10,7 @@ import type { DuplicateReason } from '../../domain/duplicateDetection';
 import { isCardRefund } from '../../domain/categorizationEngine';
 import type { TransactionType } from '../../lib/database.types';
 import { formatCurrencyAccounting } from '../../lib/format';
-import { CategoryIcon } from '../../lib/categoryIcons';
+import { CategorySelect } from '../ui/CategorySelect';
 
 /** Linha em revisão: transação importada + categoria escolhida (id ou ''). */
 export interface ReviewRow extends ParsedTransaction {
@@ -65,12 +65,6 @@ export function ReviewTransactions({
   onConfirm,
   onCancel,
 }: ReviewTransactionsProps) {
-  const categoryById = useMemo(() => {
-    const map = new Map<string, Category>();
-    for (const category of categories) map.set(category.id, category);
-    return map;
-  }, [categories]);
-
   const optionsByKind = useMemo(
     () => ({
       income: buildCategoryOptions(categories, 'income'),
@@ -221,7 +215,6 @@ export function ReviewTransactions({
             </thead>
             <tbody className="divide-y divide-brand-moss/10">
               {rows.map((row, index) => {
-                const selected = categoryById.get(row.categoryId);
                 const isDup = Boolean(row.duplicate);
                 const flagged = isDup || row.cardPayment || row.ignored;
                 return (
@@ -331,56 +324,20 @@ export function ReviewTransactions({
                       </select>
                     </td>
                     <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
-                          style={{
-                            backgroundColor: `${selected?.color ?? '#D8D8D8'}33`,
-                          }}
-                        >
-                          <CategoryIcon
-                            name={selected?.icon}
-                            className="h-3.5 w-3.5"
-                          />
-                        </span>
-                        <select
-                          value={row.categoryId}
-                          disabled={submitting}
-                          onChange={(e) =>
-                            onChangeRow(index, { categoryId: e.target.value })
-                          }
-                          className={inputClass}
-                          aria-label="Categoria"
-                        >
-                          <option value="">Sem categoria</option>
-                          {row.type === 'income' ? (
-                            optionsByKind.income.map((opt) => (
-                              <option key={opt.id} value={opt.id}>
-                                {opt.label}
-                              </option>
-                            ))
-                          ) : (
-                            <>
-                              <optgroup label="Despesas">
-                                {optionsByKind.expense.map((opt) => (
-                                  <option key={opt.id} value={opt.id}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              {optionsByKind.credit_card.length > 0 && (
-                                <optgroup label="Cartão de Crédito">
-                                  {optionsByKind.credit_card.map((opt) => (
-                                    <option key={opt.id} value={opt.id}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                            </>
-                          )}
-                        </select>
-                      </div>
+                      <CategorySelect
+                        value={row.categoryId}
+                        onChange={(v) => onChangeRow(index, { categoryId: v })}
+                        categories={categories}
+                        kinds={
+                          row.type === 'income'
+                            ? ['income']
+                            : ['expense', 'credit_card']
+                        }
+                        emptyOption={{ value: '', label: 'Sem categoria' }}
+                        placeholder="Sem categoria"
+                        disabled={submitting}
+                        ariaLabel="Categoria"
+                      />
                     </td>
                     <td className="px-3 py-1.5">
                       <input
