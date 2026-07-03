@@ -2,6 +2,20 @@ import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, LogOut, type LucideIcon } from 'lucide-react';
 
 import { useAuth } from '../../hooks/useAuth';
+import { ThemeToggle } from '../ui/ThemeToggle';
+
+/**
+ * Balão colorido que aparece ao passar o mouse quando a sidebar está recolhida,
+ * revelando o rótulo do item mesmo sem texto visível.
+ */
+function CollapsedBalloon({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg bg-brand-aqua px-3 py-2 text-sm font-semibold text-brand-moss opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100">
+      {label}
+      <span className="absolute right-full top-1/2 -translate-y-1/2 border-8 border-transparent border-r-brand-aqua" />
+    </span>
+  );
+}
 
 export interface NavItem {
   label: string;
@@ -83,10 +97,9 @@ export function Sidebar({
             to={to}
             end={to === '/'}
             onClick={onNavigate}
-            title={collapsed ? label : undefined}
             className={({ isActive }) =>
               [
-                'flex items-center rounded-xl text-sm font-medium transition',
+                'group relative flex items-center rounded-xl text-sm font-medium transition',
                 collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5',
                 isActive
                   ? 'bg-brand-aqua/20 text-brand-moss'
@@ -96,6 +109,7 @@ export function Sidebar({
           >
             <Icon className="h-5 w-5 shrink-0" strokeWidth={1.8} />
             {!collapsed && <span>{label}</span>}
+            {collapsed && <CollapsedBalloon label={label} />}
           </NavLink>
         ))}
       </nav>
@@ -127,16 +141,17 @@ export function Sidebar({
             </div>
           )}
         </div>
+        <ThemeToggle collapsed={collapsed} />
         <button
           type="button"
           onClick={() => signOut()}
-          title={collapsed ? 'Sair' : undefined}
-          className={`mt-1 flex w-full items-center rounded-xl text-sm font-medium text-brand-gray transition hover:bg-brand-light hover:text-brand-moss ${
+          className={`group relative mt-1 flex w-full items-center rounded-xl text-sm font-medium text-brand-gray transition hover:bg-brand-light hover:text-brand-moss ${
             collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
           }`}
         >
           <LogOut className="h-5 w-5 shrink-0" strokeWidth={1.8} />
           {!collapsed && <span>Sair</span>}
+          {collapsed && <CollapsedBalloon label="Sair" />}
         </button>
       </div>
     </div>

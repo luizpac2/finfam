@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { ConfigErrorScreen } from './components/ui/ConfigErrorScreen';
@@ -18,17 +19,19 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <ErrorBoundary>
-      {isSupabaseConfigured ? (
-        <BrowserRouter>
-          <ToastProvider>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
-          </ToastProvider>
-        </BrowserRouter>
-      ) : (
-        <ConfigErrorScreen />
-      )}
+      <ThemeProvider>
+        {isSupabaseConfigured ? (
+          <BrowserRouter>
+            <ToastProvider>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </ToastProvider>
+          </BrowserRouter>
+        ) : (
+          <ConfigErrorScreen />
+        )}
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>
 );

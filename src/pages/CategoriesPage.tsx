@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 import { useToast } from '../hooks/useToast';
 import { categoryService } from '../services';
@@ -300,6 +308,8 @@ function CategoryColumn({
   onEdit,
   onRemove,
 }: ColumnProps) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
   const scoped = categories.filter((c) => c.kind === kind);
   const roots = scoped
     .filter((c) => !c.parentId)
@@ -308,6 +318,14 @@ function CategoryColumn({
     scoped
       .filter((c) => c.parentId === id)
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+  const toggleExpand = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <div>
@@ -327,26 +345,35 @@ function CategoryColumn({
           </p>
         ) : (
           <ul className="divide-y divide-brand-moss/10">
-            {roots.map((root) => (
-              <li key={root.id}>
-                <CategoryRow
-                  category={root}
-                  busy={busyId === root.id}
-                  onEdit={onEdit}
-                  onRemove={onRemove}
-                />
-                {childrenOf(root.id).map((child) => (
+            {roots.map((root) => {
+              const children = childrenOf(root.id);
+              const isOpen = expanded.has(root.id);
+              return (
+                <li key={root.id}>
                   <CategoryRow
-                    key={child.id}
-                    category={child}
-                    nested
-                    busy={busyId === child.id}
+                    category={root}
+                    busy={busyId === root.id}
                     onEdit={onEdit}
                     onRemove={onRemove}
+                    expandable={children.length > 0}
+                    expanded={isOpen}
+                    childCount={children.length}
+                    onToggleExpand={() => toggleExpand(root.id)}
                   />
-                ))}
-              </li>
-            ))}
+                  {isOpen &&
+                    children.map((child) => (
+                      <CategoryRow
+                        key={child.id}
+                        category={child}
+                        nested
+                        busy={busyId === child.id}
+                        onEdit={onEdit}
+                        onRemove={onRemove}
+                      />
+                    ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -360,9 +387,24 @@ interface RowProps {
   busy: boolean;
   onEdit: (category: Category) => void;
   onRemove: (category: Category) => void;
+  /** Categoria-pai com subcategorias (mostra a seta de sanfona). */
+  expandable?: boolean;
+  expanded?: boolean;
+  childCount?: number;
+  onToggleExpand?: () => void;
 }
 
-function CategoryRow({ category, nested, busy, onEdit, onRemove }: RowProps) {
+function CategoryRow({
+  category,
+  nested,
+  busy,
+  onEdit,
+  onRemove,
+  expandable = false,
+  expanded = false,
+  childCount = 0,
+  onToggleExpand,
+}: RowProps) {
   return (
     <div
       className={`flex items-center justify-between px-4 py-2.5 ${
@@ -370,6 +412,24 @@ function CategoryRow({ category, nested, busy, onEdit, onRemove }: RowProps) {
       }`}
     >
       <div className="flex min-w-0 items-center gap-2.5">
+        {!nested &&
+          (expandable ? (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-brand-gray transition hover:bg-brand-light hover:text-brand-moss"
+              aria-label={expanded ? 'Recolher subcategorias' : 'Expandir subcategorias'}
+              aria-expanded={expanded}
+            >
+              <ChevronRight
+                className={`h-4 w-4 transition-transform ${
+                  expanded ? 'rotate-90' : ''
+                }`}
+              />
+            </button>
+          ) : (
+            <span className="h-6 w-6 shrink-0" />
+          ))}
         <span
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
           style={{ backgroundColor: `${category.color ?? '#D8D8D8'}33` }}
@@ -382,6 +442,11 @@ function CategoryRow({ category, nested, busy, onEdit, onRemove }: RowProps) {
         <span className="truncate text-sm font-medium text-brand-moss">
           {category.name}
         </span>
+        {expandable && (
+          <span className="shrink-0 rounded-full bg-brand-light px-1.5 text-xs text-brand-gray">
+            {childCount}
+          </span>
+        )}
         <span
           className="h-2 w-2 shrink-0 rounded-full ring-1 ring-brand-moss/10"
           style={{ backgroundColor: category.color ?? '#D8D8D8' }}
