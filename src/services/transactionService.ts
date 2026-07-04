@@ -265,27 +265,21 @@ export const transactionService = {
   },
 
   /**
-   * Calcula um resumo financeiro (receitas, despesas e saldo) no período.
-   * Ignora transações canceladas.
+   * Resumo financeiro (receitas, despesas e saldo) no período, agregado no
+   * BANCO (RPC `financial_summary`) — não baixa o histórico para o cliente.
+   * Exclui pagamentos de fatura (categorias tipo `credit_card`).
    */
   async summary(period: TransactionFilters = {}): Promise<FinancialSummary> {
-    const transactions = await this.list(period);
-    const totals = transactions.reduce(
-      (acc, tx) => {
-        // Pagamento de fatura (categoria tipo cartão) não entra no saldo:
-        // as compras do cartão já são lançadas como despesas.
-        if (tx.category?.kind === 'credit_card') return acc;
-        if (tx.type === 'income') acc.income += tx.amount;
-        else if (tx.type === 'expense') acc.expense += tx.amount;
-        return acc;
-      },
-      { income: 0, expense: 0 }
+    const data = unwrap(
+      await supabase.rpc('financial_summary', {
+        p_from: period.from ?? null,
+        p_to: period.to ?? null,
+      }),
+      'calcular o resumo'
     );
-
-    return {
-      income: totals.income,
-      expense: totals.expense,
-      balance: totals.income - totals.expense,
-    };
+    const row = data[0] ?? { income: 0, expense: 0 };
+    const income = Number(row.income) || 0;
+    const expense = Number(row.expense) || 0;
+    return { income, expense, balance: income - expense };
   },
 };

@@ -178,6 +178,10 @@ export interface Database {
         Args: Record<string, never>;
         Returns: string[];
       };
+      financial_summary: {
+        Args: { p_from?: string | null; p_to?: string | null };
+        Returns: { income: number; expense: number }[];
+      };
     };
     Enums: {
       user_role: UserRole;

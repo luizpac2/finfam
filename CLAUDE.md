@@ -110,7 +110,8 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
 `0001` schema · `0002` funções auth/RLS · `0003` RLS · `0004`/`0005` seed categorias ·
 `0006` kind+subcategorias · `0007` cartão de crédito · `0008` regras · `0009`
 meses-com-lançamentos (RPC) · `0010` regras por valor · `0011` índice trigram de busca +
-hardening. `supabase/reset.sql` recria do zero (fora de `migrations/`).
+hardening · `0012` RPC `financial_summary` (resumo agregado no banco).
+`supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)
 
