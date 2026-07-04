@@ -10,7 +10,7 @@ import type {
   TransactionStatus,
   TransactionType,
 } from '../lib/database.types';
-import { unwrap } from './serviceError';
+import { ServiceError, unwrap } from './serviceError';
 
 const TABLE = 'transactions';
 
@@ -56,6 +56,32 @@ const parseSearchAmount = (raw: string): number | null => {
   const n = Number(normalized);
   return Number.isFinite(n) ? Math.abs(n) : null;
 };
+
+/** Monta o filtro `or` do PostgREST para busca por descrição e/ou valor. */
+const buildSearchOr = (term: string): string | null => {
+  const t = term.trim();
+  const safe = t.replace(/[,().*%]/g, ' ').trim();
+  const hasLetters = /[a-zA-ZÀ-ÿ]/.test(t);
+  const num = hasLetters ? null : parseSearchAmount(t);
+  const or: string[] = [];
+  if (safe) or.push(`description.ilike.*${safe}*`);
+  if (num !== null) or.push(`amount.eq.${num}`);
+  return or.length ? or.join(',') : null;
+};
+
+/** Filtros da listagem paginada de lançamentos (ex.: página de categoria). */
+export interface PagedFilters {
+  categoryId?: string;
+  type?: TransactionType;
+  from?: string; // YYYY-MM-DD inclusive
+  to?: string; // YYYY-MM-DD inclusive
+  search?: string;
+}
+
+export interface PagedResult {
+  rows: Transaction[];
+  total: number;
+}
 
 export const transactionService = {
   /** Lista transações com filtros opcionais, ordenadas pela data (desc). */
@@ -134,6 +160,73 @@ export const transactionService = {
     );
     return (rows as unknown as TransactionRowWithCategory[]).map(
       mapToTransaction
+    );
+  },
+
+  /**
+   * Lista paginada (server-side) com contagem total. Um acesso ao banco por
+   * página, trazendo apenas `pageSize` linhas — bom para históricos grandes.
+   */
+  async listPaged(
+    filters: PagedFilters,
+    page: number,
+    pageSize: number
+  ): Promise<PagedResult> {
+    let query = supabase
+      .from(TABLE)
+      .select(SELECT_WITH_CATEGORY, { count: 'exact' })
+      .order('date', { ascending: false });
+
+    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+    if (filters.type) query = query.eq('type', filters.type);
+    if (filters.from) query = query.gte('date', filters.from);
+    if (filters.to) query = query.lte('date', filters.to);
+    if (filters.search) {
+      const or = buildSearchOr(filters.search);
+      if (or) query = query.or(or);
+    }
+
+    const start = (page - 1) * pageSize;
+    query = query.range(start, start + pageSize - 1);
+
+    const { data, error, count } = await query;
+    if (error) {
+      console.error('[service] Falha ao paginar transações:', error);
+      throw new ServiceError('Não foi possível listar as transações.', error);
+    }
+    return {
+      rows: (data as unknown as TransactionRowWithCategory[]).map(
+        mapToTransaction
+      ),
+      total: count ?? 0,
+    };
+  },
+
+  /**
+   * Totais (receita/despesa) do conjunto filtrado — consulta enxuta (só
+   * `amount, type`, sem join), somada no cliente. Usada nos totais da página.
+   */
+  async filteredTotals(
+    filters: PagedFilters
+  ): Promise<{ income: number; expense: number }> {
+    let query = supabase.from(TABLE).select('amount, type');
+    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+    if (filters.type) query = query.eq('type', filters.type);
+    if (filters.from) query = query.gte('date', filters.from);
+    if (filters.to) query = query.lte('date', filters.to);
+    if (filters.search) {
+      const or = buildSearchOr(filters.search);
+      if (or) query = query.or(or);
+    }
+
+    const rows = unwrap(await query, 'somar as transações');
+    return (rows as unknown as Array<{ amount: number; type: TransactionType }>).reduce(
+      (acc, r) => {
+        if (r.type === 'income') acc.income += Number(r.amount);
+        else acc.expense += Number(r.amount);
+        return acc;
+      },
+      { income: 0, expense: 0 }
     );
   },
 

@@ -1,29 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Search, X } from 'lucide-react';
 
 import { transactionService } from '../../services';
+import { useReferenceData } from '../../hooks/useReferenceData';
 import type { Transaction } from '../../domain/entities/Transaction';
+import { normalizeText } from '../../domain/categorizationEngine';
+import { CategoryKindLabel } from '../../domain/constants';
 import { CategoryIcon } from '../../lib/categoryIcons';
 import { formatCurrencyAccounting, formatDate } from '../../lib/format';
 
 /**
- * Busca global (topo da aplicação): encontra lançamentos por descrição e/ou
- * valor. Ao clicar em um resultado, abre o lançamento para edição na página
- * Transações (via `?tx=<id>`).
+ * Busca global (topo): encontra CATEGORIAS (pelo nome) e LANÇAMENTOS (por
+ * descrição/valor). Categorias abrem a lista de lançamentos daquela categoria;
+ * lançamentos abrem o editor.
  */
 export function GlobalSearch() {
   const navigate = useNavigate();
+  const { categories } = useReferenceData();
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Busca com debounce.
+  const q = term.trim();
+
+  // Categorias que casam (cliente, cache) — instantâneo.
+  const matchingCats = useMemo(() => {
+    if (q.length < 2) return [];
+    const n = normalizeText(q);
+    return categories
+      .filter((c) => normalizeText(c.name).includes(n))
+      .slice(0, 5);
+  }, [q, categories]);
+
+  // Lançamentos (servidor) com debounce.
   useEffect(() => {
-    const t = term.trim();
-    if (t.length < 2) {
+    if (q.length < 2) {
       setResults([]);
       setLoading(false);
       return;
@@ -31,7 +45,7 @@ export function GlobalSearch() {
     setLoading(true);
     const handle = window.setTimeout(async () => {
       try {
-        setResults(await transactionService.search(t));
+        setResults(await transactionService.search(q));
       } catch {
         setResults([]);
       } finally {
@@ -39,9 +53,8 @@ export function GlobalSearch() {
       }
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [term]);
+  }, [q]);
 
-  // Fecha ao clicar fora.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
@@ -50,14 +63,22 @@ export function GlobalSearch() {
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
-  const openTx = (id: string) => {
+  const close = () => {
     setOpen(false);
     setTerm('');
     setResults([]);
+  };
+  const openTx = (id: string) => {
+    close();
     navigate(`/transacoes?tx=${id}`);
   };
+  const openCat = (id: string) => {
+    close();
+    navigate(`/categoria/${id}`);
+  };
 
-  const showPanel = open && term.trim().length >= 2;
+  const showPanel = open && q.length >= 2;
+  const nothing = !loading && matchingCats.length === 0 && results.length === 0;
 
   return (
     <div ref={wrapRef} className="relative w-full">
@@ -74,9 +95,9 @@ export function GlobalSearch() {
           onKeyDown={(e) => {
             if (e.key === 'Escape') setOpen(false);
           }}
-          placeholder="Buscar lançamentos por descrição, valor…"
+          placeholder="Buscar categorias e lançamentos…"
           className="w-full rounded-xl border border-brand-moss/20 bg-white py-2 pl-9 pr-8 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30"
-          aria-label="Buscar lançamentos"
+          aria-label="Buscar"
         />
         {term && (
           <button
@@ -95,14 +116,48 @@ export function GlobalSearch() {
 
       {showPanel && (
         <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-96 overflow-y-auto rounded-xl border border-brand-moss/15 bg-white p-1 shadow-card">
+          {matchingCats.length > 0 && (
+            <>
+              <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-brand-gray">
+                Categorias
+              </p>
+              {matchingCats.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => openCat(c.id)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-brand-light"
+                >
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: `${c.color ?? '#D8D8D8'}33` }}
+                  >
+                    <CategoryIcon name={c.icon} className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-brand-moss">
+                    {c.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-brand-gray">
+                    {CategoryKindLabel[c.kind]}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
+
+          {(loading || results.length > 0 || matchingCats.length === 0) && (
+            <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-brand-gray">
+              Lançamentos
+            </p>
+          )}
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-3 text-sm text-brand-gray">
               <Loader2 className="h-4 w-4 animate-spin" />
               Buscando…
             </div>
-          ) : results.length === 0 ? (
+          ) : nothing ? (
             <p className="px-3 py-3 text-sm text-brand-gray">
-              Nenhum lançamento encontrado.
+              Nada encontrado.
             </p>
           ) : (
             results.map((tx) => {

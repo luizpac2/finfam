@@ -1,10 +1,12 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Check,
   ChevronRight,
   Loader2,
   Pencil,
   Plus,
+  Receipt,
   Trash2,
   X,
 } from 'lucide-react';
@@ -131,14 +133,16 @@ export default function CategoriesPage() {
         </p>
       </header>
 
-      {/* Formulário (criar / editar) */}
-      <Card>
+      <div className="grid gap-6 lg:grid-cols-[19rem_1fr] lg:items-start">
+        {/* Formulário (criar / editar) — barra lateral fixa */}
+        <div className="lg:sticky lg:top-6">
+        <Card>
         <h2 className="mb-4 text-base font-semibold text-brand-moss">
           {form.id ? 'Editar categoria' : 'Nova categoria'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="lg:col-span-2">
+          <div className="space-y-3">
+            <label className="block">
               <span className="mb-1 block text-sm font-medium text-brand-moss">
                 Nome
               </span>
@@ -260,10 +264,11 @@ export default function CategoriesPage() {
             </div>
           </div>
         </form>
-      </Card>
+        </Card>
+        </div>
 
-      {/* Listas por tipo */}
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {/* Listas por tipo */}
+        <div className="grid min-w-0 gap-6 sm:grid-cols-2">
         <CategoryColumn
           title="Receitas"
           kind="income"
@@ -288,6 +293,7 @@ export default function CategoriesPage() {
           onEdit={startEdit}
           onRemove={remove}
         />
+        </div>
       </div>
     </div>
   );
@@ -459,6 +465,14 @@ function CategoryRow({
         />
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <Link
+          to={`/categoria/${category.id}`}
+          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss"
+          aria-label={`Ver lançamentos de ${category.name}`}
+          title="Ver lançamentos desta categoria"
+        >
+          <Receipt className="h-4 w-4" />
+        </Link>
         <button
           type="button"
           onClick={() => onEdit(category)}

@@ -12,6 +12,9 @@ const AnalyticsDashboard = lazy(() => import('../pages/AnalyticsDashboard'));
 const Import = lazy(() => import('../pages/Import'));
 const TransactionsPage = lazy(() => import('../pages/TransactionsPage'));
 const CategoriesPage = lazy(() => import('../pages/CategoriesPage'));
+const CategoryTransactionsPage = lazy(
+  () => import('../pages/CategoryTransactionsPage')
+);
 const RulesPage = lazy(() => import('../pages/RulesPage'));
 const AdminDashboard = lazy(() => import('../pages/AdminDashboard'));
 const NeedInvitePage = lazy(() => import('../pages/NeedInvitePage'));
@@ -38,6 +41,10 @@ export function AppRoutes() {
           <Route path="/dashboard" element={<AnalyticsDashboard />} />
           <Route path="/importar" element={<Import />} />
           <Route path="/transacoes" element={<TransactionsPage />} />
+          <Route
+            path="/categoria/:categoryId"
+            element={<CategoryTransactionsPage />}
+          />
           <Route
             path="/categorias"
             element={
