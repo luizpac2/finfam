@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
+import { expandCategorySelection } from '../domain/entities/Category';
 import type { Transaction } from '../domain/entities/Transaction';
 import { expenseByCategory } from '../domain/analytics';
 import {
@@ -110,12 +111,17 @@ export default function AnalyticsDashboard() {
     };
   }, [f, t, toast]);
 
+  // Selecionar uma categoria-pai inclui as subcategorias.
+  const effectiveCats = useMemo(
+    () => expandCategorySelection(selectedCats, categories),
+    [selectedCats, categories]
+  );
   const visibleTx = useMemo(() => {
-    if (selectedCats.size === 0) return transactions;
+    if (effectiveCats.size === 0) return transactions;
     return transactions.filter((tx) =>
-      selectedCats.has(tx.categoryId ?? UNCATEGORIZED)
+      effectiveCats.has(tx.categoryId ?? UNCATEGORIZED)
     );
-  }, [transactions, selectedCats]);
+  }, [transactions, effectiveCats]);
 
   const series = useMemo(
     () => buildSeries(visibleTx, fromDate, toDate, groupBy),

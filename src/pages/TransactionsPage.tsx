@@ -8,7 +8,10 @@ import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import { applyUserRules } from '../domain/ruleEngine';
-import type { Category } from '../domain/entities/Category';
+import {
+  expandCategorySelection,
+  type Category,
+} from '../domain/entities/Category';
 import type { Transaction } from '../domain/entities/Transaction';
 import { FilterSidebar } from '../components/filters/FilterSidebar';
 import { UNCATEGORIZED } from '../components/filters/CategoryFilter';
@@ -117,19 +120,25 @@ export default function TransactionsPage() {
     return map;
   }, [categories]);
 
+  // Selecionar uma categoria-pai inclui as subcategorias.
+  const effectiveCats = useMemo(
+    () => expandCategorySelection(selectedCats, categories),
+    [selectedCats, categories]
+  );
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return transactions.filter((tx) => {
       if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
       if (term && !tx.description.toLowerCase().includes(term)) return false;
       if (
-        selectedCats.size > 0 &&
-        !selectedCats.has(tx.categoryId ?? UNCATEGORIZED)
+        effectiveCats.size > 0 &&
+        !effectiveCats.has(tx.categoryId ?? UNCATEGORIZED)
       )
         return false;
       return true;
     });
-  }, [transactions, typeFilter, search, selectedCats]);
+  }, [transactions, typeFilter, search, effectiveCats]);
 
   // Mantém a seleção coerente: descarta ids que saíram da lista visível.
   useEffect(() => {

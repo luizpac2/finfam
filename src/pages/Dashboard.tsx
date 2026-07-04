@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
+import { expandCategorySelection } from '../domain/entities/Category';
 import type { Transaction } from '../domain/entities/Transaction';
 import {
   buildMonthlySeries,
@@ -103,12 +104,17 @@ export default function Dashboard() {
 
   // Aplica o filtro de categorias às agregações do período (o saldo total em
   // conta permanece global, pois representa o acumulado de todas as categorias).
+  // Selecionar uma categoria-pai inclui as subcategorias.
+  const effectiveCats = useMemo(
+    () => expandCategorySelection(selectedCats, categories),
+    [selectedCats, categories]
+  );
   const visibleTx = useMemo(() => {
-    if (selectedCats.size === 0) return windowTx;
+    if (effectiveCats.size === 0) return windowTx;
     return windowTx.filter((tx) =>
-      selectedCats.has(tx.categoryId ?? UNCATEGORIZED)
+      effectiveCats.has(tx.categoryId ?? UNCATEGORIZED)
     );
-  }, [windowTx, selectedCats]);
+  }, [windowTx, effectiveCats]);
 
   const series = useMemo(
     () => buildMonthlySeries(visibleTx, MONTHS_WINDOW, refDate),

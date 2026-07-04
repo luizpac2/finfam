@@ -53,6 +53,23 @@ export interface CategoryOption {
   depth: number;
 }
 
+/**
+ * Expande uma seleção de categorias para incluir as subcategorias: ao escolher
+ * uma categoria-pai, os lançamentos das suas subcategorias também entram no
+ * filtro. Selecionar uma subcategoria continua valendo só para ela.
+ */
+export const expandCategorySelection = (
+  selected: Set<string>,
+  categories: Category[]
+): Set<string> => {
+  if (selected.size === 0) return selected;
+  const out = new Set(selected);
+  for (const c of categories) {
+    if (c.parentId && selected.has(c.parentId)) out.add(c.id);
+  }
+  return out;
+};
+
 /** Slug legível para URLs (ex.: "Energia Elétrica" → "energia-eletrica"). */
 export const categorySlug = (name: string): string =>
   name
