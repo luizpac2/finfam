@@ -112,7 +112,7 @@ export default function Import() {
       // Regras do usuário têm prioridade sobre a heurística.
       const reviewed: ReviewRow[] = parsed.map((tx, index) => {
         const duplicate = duplicates.get(index);
-        const rule = applyUserRules(tx.description, rules);
+        const rule = applyUserRules(tx.description, tx.amount, rules);
         const ignored = rule.ignore || undefined;
 
         // Extrato de cartão: as compras (débitos) viram despesas ligadas ao
@@ -191,7 +191,7 @@ export default function Import() {
     setRows((current) =>
       current.map((row) => {
         if (row.categoryId) return row;
-        const rule = applyUserRules(row.description, rules);
+        const rule = applyUserRules(row.description, row.amount, rules);
         const categoryId =
           rule.categoryId ??
           suggestCategoryId(row.description, row.type, categories);

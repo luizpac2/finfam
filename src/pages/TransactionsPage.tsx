@@ -283,7 +283,7 @@ export default function TransactionsPage() {
     // estrita (só match real; ambíguos ficam de fora).
     const groups = new Map<string, string[]>();
     for (const tx of targets) {
-      const rule = applyUserRules(tx.description, rules);
+      const rule = applyUserRules(tx.description, tx.amount, rules);
       const catId =
         rule.categoryId ??
         suggestCategoryIdStrict(tx.description, tx.type, categories);

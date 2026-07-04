@@ -52,7 +52,8 @@ export interface Database {
       category_rules: {
         Row: {
           id: string;
-          keyword: string;
+          keyword: string | null;
+          amount: number | null;
           action: RuleAction;
           category_id: string | null;
           created_by: string | null;
@@ -61,7 +62,8 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          keyword: string;
+          keyword?: string | null;
+          amount?: number | null;
           action?: RuleAction;
           category_id?: string | null;
           created_by?: string | null;
@@ -70,7 +72,8 @@ export interface Database {
         };
         Update: {
           id?: string;
-          keyword?: string;
+          keyword?: string | null;
+          amount?: number | null;
           action?: RuleAction;
           category_id?: string | null;
           created_by?: string | null;

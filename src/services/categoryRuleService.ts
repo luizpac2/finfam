@@ -14,15 +14,20 @@ const TABLE = 'category_rules';
  * Leitura para membros ativos; escrita restrita a admins (via RLS).
  */
 export const categoryRuleService = {
-  /** Lista as regras. Palavras mais longas primeiro (mais específicas). */
+  /**
+   * Lista as regras, das mais específicas para as mais genéricas.
+   * Especificidade: regras com valor pesam mais; depois, palavra mais longa.
+   */
   async list(): Promise<CategoryRule[]> {
     const rows = unwrap(
-      await supabase.from(TABLE).select('*').order('keyword', { ascending: true }),
+      await supabase.from(TABLE).select('*').order('created_at', { ascending: true }),
       'listar as regras'
     );
+    const specificity = (r: CategoryRule) =>
+      (r.amount != null ? 1000 : 0) + r.keyword.length;
     return rows
       .map(mapToCategoryRule)
-      .sort((a, b) => b.keyword.length - a.keyword.length);
+      .sort((a, b) => specificity(b) - specificity(a));
   },
 
   /** Cria uma regra (restrito a admins por RLS). */

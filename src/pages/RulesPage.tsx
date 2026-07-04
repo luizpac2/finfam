@@ -14,17 +14,18 @@ import {
   categoryService,
   transactionService,
 } from '../services';
-import { normalizeText } from '../domain/categorizationEngine';
-import { applyUserRules } from '../domain/ruleEngine';
+import { applyUserRules, ruleMatches } from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
-import type {
-  CategoryRule,
-  RuleAction,
+import {
+  ruleConditionLabel,
+  type CategoryRule,
+  type RuleAction,
 } from '../domain/entities/CategoryRule';
 import { Card } from '../components/ui/Card';
 import { CategorySelect } from '../components/ui/CategorySelect';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
 import { CategoryIcon } from '../lib/categoryIcons';
+import { formatCurrency } from '../lib/format';
 
 const inputClass =
   'w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
@@ -48,6 +49,7 @@ export default function RulesPage() {
   const [applyingAllIgnore, setApplyingAllIgnore] = useState(false);
 
   const [keyword, setKeyword] = useState('');
+  const [amount, setAmount] = useState('');
   const [action, setAction] = useState<RuleAction>('categorize');
   const [categoryId, setCategoryId] = useState('');
 
@@ -80,7 +82,16 @@ export default function RulesPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const term = keyword.trim();
-    if (!term) return;
+    const raw = amount.trim();
+    const value = raw ? Math.abs(Number(raw.replace(',', '.'))) : null;
+    if (!term && (value == null || Number.isNaN(value))) {
+      toast.error('Informe uma palavra e/ou um valor.');
+      return;
+    }
+    if (value != null && Number.isNaN(value)) {
+      toast.error('Valor inválido.');
+      return;
+    }
     if (action === 'categorize' && !categoryId) {
       toast.error('Escolha a categoria para a regra.');
       return;
@@ -88,12 +99,14 @@ export default function RulesPage() {
     setSaving(true);
     try {
       await categoryRuleService.create({
-        keyword: term,
+        keyword: term || null,
+        amount: value,
         action,
         categoryId: action === 'categorize' ? categoryId : null,
         createdBy: profile?.id ?? null,
       });
       setKeyword('');
+      setAmount('');
       setCategoryId('');
       toast.success('Regra criada.');
       await load();
@@ -112,12 +125,11 @@ export default function RulesPage() {
     setApplyingId(rule.id);
     try {
       const all = await transactionService.list({});
-      const kw = normalizeText(rule.keyword);
       const ids = all
         .filter(
           (tx) =>
             tx.categoryId !== rule.categoryId &&
-            normalizeText(tx.description).includes(kw)
+            ruleMatches(rule, tx.description, tx.amount)
         )
         .map((tx) => tx.id);
 
@@ -127,7 +139,7 @@ export default function RulesPage() {
       }
       if (
         !window.confirm(
-          `Recategorizar ${ids.length} lançamento(s) que contêm "${rule.keyword}" para "${catName}"? Isso vale para todo o histórico.`
+          `Recategorizar ${ids.length} lançamento(s) que casam com "${ruleConditionLabel(rule, formatCurrency)}" para "${catName}"? Isso vale para todo o histórico.`
         )
       )
         return;
@@ -155,7 +167,7 @@ export default function RulesPage() {
       const all = await transactionService.list({});
       const groups = new Map<string, string[]>();
       for (const tx of all) {
-        const { categoryId } = applyUserRules(tx.description, rules);
+        const { categoryId } = applyUserRules(tx.description, tx.amount, rules);
         if (!categoryId || tx.categoryId === categoryId) continue;
         const list = groups.get(categoryId) ?? [];
         list.push(tx.id);
@@ -194,9 +206,8 @@ export default function RulesPage() {
     setApplyingId(rule.id);
     try {
       const all = await transactionService.list({});
-      const kw = normalizeText(rule.keyword);
       const ids = all
-        .filter((tx) => normalizeText(tx.description).includes(kw))
+        .filter((tx) => ruleMatches(rule, tx.description, tx.amount))
         .map((tx) => tx.id);
 
       if (ids.length === 0) {
@@ -205,7 +216,7 @@ export default function RulesPage() {
       }
       if (
         !window.confirm(
-          `Excluir PERMANENTEMENTE ${ids.length} lançamento(s) que contêm "${rule.keyword}"? Isso vale para todo o histórico e não pode ser desfeito.`
+          `Excluir PERMANENTEMENTE ${ids.length} lançamento(s) que casam com "${ruleConditionLabel(rule, formatCurrency)}"? Isso vale para todo o histórico e não pode ser desfeito.`
         )
       )
         return;
@@ -229,7 +240,7 @@ export default function RulesPage() {
     try {
       const all = await transactionService.list({});
       const ids = all
-        .filter((tx) => applyUserRules(tx.description, rules).ignore)
+        .filter((tx) => applyUserRules(tx.description, tx.amount, rules).ignore)
         .map((tx) => tx.id);
 
       if (ids.length === 0) {
@@ -277,27 +288,44 @@ export default function RulesPage() {
           Regras de categorização
         </h1>
         <p className="mt-1 text-sm text-brand-gray">
-          Quando uma palavra aparece na descrição, o lançamento é categorizado
-          automaticamente — ou ignorado — na importação e no botão "Categorizar
-          automaticamente".
+          Categorize (ou ignore) automaticamente por <strong>palavra</strong> na
+          descrição e/ou por <strong>valor</strong> do lançamento — ex.:
+          “sempre que for R$ 133,43, categorizar como Seguro”. Vale na importação
+          e no botão “Categorizar automaticamente”.
         </p>
       </header>
 
       {/* Formulário */}
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <label className="lg:col-span-2">
               <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Palavra na descrição
+                Palavra na descrição{' '}
+                <span className="font-normal text-brand-gray">(opcional)</span>
               </span>
               <input
                 type="text"
-                required
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 placeholder="Ex.: Luz, ENEL, Netflix…"
                 className={inputClass}
+              />
+            </label>
+
+            <label>
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Valor{' '}
+                <span className="font-normal text-brand-gray">(opcional)</span>
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Ex.: 133,43"
+                className={`${inputClass} text-right`}
               />
             </label>
 
@@ -323,7 +351,7 @@ export default function RulesPage() {
               </div>
             </div>
 
-            <label>
+            <label className="lg:col-span-2">
               <span className="mb-1 block text-sm font-medium text-brand-moss">
                 Categoria
               </span>
@@ -391,6 +419,7 @@ export default function RulesPage() {
                 <RuleRow
                   key={rule.id}
                   keyword={rule.keyword}
+                  amount={rule.amount}
                   busy={busyId === rule.id}
                   onRemove={() => remove(rule)}
                   onApply={() => applyRuleToHistory(rule)}
@@ -443,12 +472,13 @@ export default function RulesPage() {
               <RuleRow
                 key={rule.id}
                 keyword={rule.keyword}
+                amount={rule.amount}
                 busy={busyId === rule.id}
                 onRemove={() => remove(rule)}
                 onApply={() => applyIgnoreRuleToHistory(rule)}
                 applying={applyingId === rule.id}
                 applyIcon="delete"
-                applyTitle="Excluir do histórico os lançamentos com esta palavra"
+                applyTitle="Excluir do histórico os lançamentos que casam"
               >
                 <span className="text-sm italic text-brand-gray">
                   ignorar na importação
@@ -498,6 +528,7 @@ function Empty({ text }: { text: string }) {
 
 function RuleRow({
   keyword,
+  amount,
   busy,
   onRemove,
   onApply,
@@ -507,6 +538,7 @@ function RuleRow({
   children,
 }: {
   keyword: string;
+  amount: number | null;
   busy: boolean;
   onRemove: () => void;
   onApply?: () => void;
@@ -516,12 +548,25 @@ function RuleRow({
   children: ReactNode;
 }) {
   const isDelete = applyIcon === 'delete';
+  const label = ruleConditionLabel({ keyword, amount }, formatCurrency);
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-2.5">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="shrink-0 rounded-md bg-brand-light px-2 py-0.5 text-sm font-semibold text-brand-moss">
-          {keyword}
-        </span>
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          {keyword && (
+            <span className="rounded-md bg-brand-light px-2 py-0.5 text-sm font-semibold text-brand-moss">
+              {keyword}
+            </span>
+          )}
+          {keyword && amount != null && (
+            <span className="text-xs text-brand-gray">+</span>
+          )}
+          {amount != null && (
+            <span className="rounded-md bg-brand-aqua/20 px-2 py-0.5 text-sm font-semibold text-brand-moss">
+              {formatCurrency(amount)}
+            </span>
+          )}
+        </div>
         <span className="text-brand-gray">→</span>
         <span className="min-w-0 truncate">{children}</span>
       </div>
@@ -535,7 +580,7 @@ function RuleRow({
             className={`rounded-lg p-1.5 text-brand-gray transition hover:bg-white disabled:opacity-50 ${
               isDelete ? 'hover:text-red-600' : 'hover:text-brand-moss'
             }`}
-            aria-label={`${applyTitle} (${keyword})`}
+            aria-label={`${applyTitle} (${label})`}
           >
             {applying ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -551,7 +596,7 @@ function RuleRow({
           onClick={onRemove}
           disabled={busy}
           className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-red-600 disabled:opacity-50"
-          aria-label={`Excluir regra ${keyword}`}
+          aria-label={`Excluir regra ${label}`}
         >
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
