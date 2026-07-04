@@ -133,16 +133,14 @@ export default function CategoriesPage() {
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[19rem_1fr] lg:items-start">
-        {/* Formulário (criar / editar) — barra lateral fixa */}
-        <div className="lg:sticky lg:top-6">
-        <Card>
+      {/* Formulário (criar / editar) */}
+      <Card>
         <h2 className="mb-4 text-base font-semibold text-brand-moss">
           {form.id ? 'Editar categoria' : 'Nova categoria'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-3">
-            <label className="block">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="lg:col-span-2">
               <span className="mb-1 block text-sm font-medium text-brand-moss">
                 Nome
               </span>
@@ -264,11 +262,10 @@ export default function CategoriesPage() {
             </div>
           </div>
         </form>
-        </Card>
-        </div>
+      </Card>
 
-        {/* Listas por tipo */}
-        <div className="grid min-w-0 gap-6 sm:grid-cols-2">
+      {/* Listas por tipo — cada seção ocupa a largura e distribui em colunas */}
+      <div className="space-y-6">
         <CategoryColumn
           title="Receitas"
           kind="income"
@@ -293,7 +290,6 @@ export default function CategoriesPage() {
           onEdit={startEdit}
           onRemove={remove}
         />
-        </div>
       </div>
     </div>
   );
@@ -350,18 +346,21 @@ function CategoryColumn({
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>
         <span className="text-sm text-brand-gray">({scoped.length})</span>
       </div>
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden p-2">
         {roots.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm text-brand-gray">
+          <p className="px-2 py-6 text-center text-sm text-brand-gray">
             Nenhuma categoria de {title.toLowerCase()} ainda.
           </p>
         ) : (
-          <ul className="divide-y divide-brand-moss/10">
+          <div className="gap-x-2 sm:columns-2 xl:columns-3 2xl:columns-4">
             {roots.map((root) => {
               const children = childrenOf(root.id);
               const isOpen = expanded.has(root.id);
               return (
-                <li key={root.id}>
+                <div
+                  key={root.id}
+                  className="mb-1 break-inside-avoid overflow-hidden rounded-lg border border-brand-moss/10"
+                >
                   <CategoryRow
                     category={root}
                     busy={busyId === root.id}
@@ -383,10 +382,10 @@ function CategoryColumn({
                         onRemove={onRemove}
                       />
                     ))}
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </Card>
     </div>

@@ -72,6 +72,8 @@ const buildSearchOr = (term: string): string | null => {
 /** Filtros da listagem paginada de lançamentos (ex.: página de categoria). */
 export interface PagedFilters {
   categoryId?: string;
+  /** Vários ids (ex.: categoria + subcategorias). Tem prioridade sobre categoryId. */
+  categoryIds?: string[];
   type?: TransactionType;
   from?: string; // YYYY-MM-DD inclusive
   to?: string; // YYYY-MM-DD inclusive
@@ -177,7 +179,10 @@ export const transactionService = {
       .select(SELECT_WITH_CATEGORY, { count: 'exact' })
       .order('date', { ascending: false });
 
-    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+    if (filters.categoryIds && filters.categoryIds.length > 0)
+      query = query.in('category_id', filters.categoryIds);
+    else if (filters.categoryId)
+      query = query.eq('category_id', filters.categoryId);
     if (filters.type) query = query.eq('type', filters.type);
     if (filters.from) query = query.gte('date', filters.from);
     if (filters.to) query = query.lte('date', filters.to);
@@ -210,7 +215,10 @@ export const transactionService = {
     filters: PagedFilters
   ): Promise<{ income: number; expense: number }> {
     let query = supabase.from(TABLE).select('amount, type');
-    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+    if (filters.categoryIds && filters.categoryIds.length > 0)
+      query = query.in('category_id', filters.categoryIds);
+    else if (filters.categoryId)
+      query = query.eq('category_id', filters.categoryId);
     if (filters.type) query = query.eq('type', filters.type);
     if (filters.from) query = query.gte('date', filters.from);
     if (filters.to) query = query.lte('date', filters.to);

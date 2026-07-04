@@ -42,6 +42,15 @@ export default function CategoryTransactionsPage() {
     [categories, categoryId]
   );
 
+  // Ver uma categoria inclui as subcategorias; uma subcategoria mostra só ela.
+  const categoryIds = useMemo(() => {
+    const childIds = categories
+      .filter((c) => c.parentId === categoryId)
+      .map((c) => c.id);
+    return [categoryId, ...childIds];
+  }, [categories, categoryId]);
+  const childCount = categoryIds.length - 1;
+
   const [from, setFrom] = useState<Period>(ALL_TIME);
   const [to, setTo] = useState<Period>(CURRENT);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -65,13 +74,13 @@ export default function CategoryTransactionsPage() {
 
   const filters = useMemo(
     () => ({
-      categoryId,
+      categoryIds,
       type: typeFilter === 'all' ? undefined : typeFilter,
       from: iso(new Date(from.year, from.month, 1)),
       to: iso(new Date(to.year, to.month + 1, 0)),
       search: debounced || undefined,
     }),
-    [categoryId, typeFilter, from, to, debounced]
+    [categoryIds, typeFilter, from, to, debounced]
   );
 
   // Totais do conjunto filtrado (consulta enxuta).
@@ -145,7 +154,11 @@ export default function CategoryTransactionsPage() {
           <h1 className="text-xl font-bold tracking-tight text-brand-moss sm:text-2xl">
             {category?.name ?? 'Categoria'}
           </h1>
-          <p className="text-sm text-brand-gray">Todos os lançamentos desta categoria.</p>
+          <p className="text-sm text-brand-gray">
+            {childCount > 0
+              ? `Todos os lançamentos — inclui ${childCount} subcategoria(s).`
+              : 'Todos os lançamentos desta categoria.'}
+          </p>
         </div>
       </header>
 
