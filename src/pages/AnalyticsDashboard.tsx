@@ -19,7 +19,7 @@ import { UNCATEGORIZED } from '../components/filters/CategoryFilter';
 import type { Period } from '../components/filters/PeriodNavigator';
 import { DashboardFilters } from '../components/dashboard/DashboardFilters';
 import { IncomeExpenseBarChart } from '../components/dashboard/IncomeExpenseBarChart';
-import { ExpenseDonutChart } from '../components/dashboard/ExpenseDonutChart';
+import { CategoryBarChart } from '../components/dashboard/CategoryBarChart';
 import { CumulativeBalanceChart } from '../components/dashboard/CumulativeBalanceChart';
 import { TopCategoriesChart } from '../components/dashboard/TopCategoriesChart';
 import { YearlyComparisonChart } from '../components/dashboard/YearlyComparisonChart';
@@ -211,7 +211,7 @@ export default function AnalyticsDashboard() {
             </Panel>
 
             <Panel title="Despesas por categoria" subtitle={rangeLabel}>
-              {loading ? <Loading /> : <ExpenseDonutChart data={catSlices} />}
+              {loading ? <Loading /> : <CategoryBarChart data={topCats} />}
             </Panel>
 
             <Panel title="Maiores categorias de despesa">

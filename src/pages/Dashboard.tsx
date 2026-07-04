@@ -11,7 +11,7 @@ import { expenseByCategory, isCountable } from '../domain/analytics';
 import { buildSeries, type GroupBy } from '../domain/dashboardAnalytics';
 import { KpiCard } from '../components/dashboard/KpiCard';
 import { IncomeExpenseBarChart } from '../components/dashboard/IncomeExpenseBarChart';
-import { TopCategoriesChart } from '../components/dashboard/TopCategoriesChart';
+import { CategoryBarChart } from '../components/dashboard/CategoryBarChart';
 import { CategoryFilter, UNCATEGORIZED } from '../components/filters/CategoryFilter';
 import {
   BarChartSkeleton,
@@ -301,7 +301,7 @@ export default function Dashboard() {
                 {loading ? (
                   <BarChartSkeleton />
                 ) : (
-                  <TopCategoriesChart data={topCats} />
+                  <CategoryBarChart data={topCats} valueLabel="Total" />
                 )}
               </Panel>
 
@@ -314,7 +314,7 @@ export default function Dashboard() {
                 {loading ? (
                   <BarChartSkeleton />
                 ) : (
-                  <TopCategoriesChart data={avgCats} />
+                  <CategoryBarChart data={avgCats} valueLabel="Média/mês" />
                 )}
               </Panel>
             </div>
