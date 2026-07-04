@@ -3,8 +3,8 @@ import { Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { categoryService, transactionService } from '../services';
-import type { Category } from '../domain/entities/Category';
+import { useReferenceData } from '../hooks/useReferenceData';
+import { transactionService } from '../services';
 import type { Transaction } from '../domain/entities/Transaction';
 import {
   buildMonthlySeries,
@@ -47,8 +47,7 @@ export default function Dashboard() {
   const [totalBalance, setTotalBalance] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
+  const { categories, loadingCategories } = useReferenceData();
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
   const [monthsWithData, setMonthsWithData] = useState<Set<string>>();
 
@@ -57,19 +56,9 @@ export default function Dashboard() {
     [period]
   );
 
-  // Categorias + meses com lançamentos para o filtro lateral.
+  // Meses com lançamentos para o filtro lateral (categorias vêm do cache).
   useEffect(() => {
     let active = true;
-    (async () => {
-      try {
-        const list = await categoryService.list();
-        if (active) setCategories(list);
-      } catch {
-        /* silencioso; o painel funciona sem o filtro de categorias */
-      } finally {
-        if (active) setLoadingCategories(false);
-      }
-    })();
     transactionService.monthsWithData().then((s) => {
       if (active) setMonthsWithData(s);
     });

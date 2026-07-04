@@ -1,19 +1,10 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react';
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Ban, Eraser, Loader2, Plus, RefreshCw, Tag, Trash2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import {
-  categoryRuleService,
-  categoryService,
-  transactionService,
-} from '../services';
+import { useReferenceData } from '../hooks/useReferenceData';
+import { categoryRuleService, transactionService } from '../services';
 import { applyUserRules, ruleMatches } from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
 import {
@@ -39,9 +30,13 @@ export default function RulesPage() {
   const { profile } = useAuth();
   const toast = useToast();
 
-  const [rules, setRules] = useState<CategoryRule[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    rules,
+    categories,
+    loadingRules,
+    loadingCategories,
+    refreshRules,
+  } = useReferenceData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -52,26 +47,6 @@ export default function RulesPage() {
   const [amount, setAmount] = useState('');
   const [action, setAction] = useState<RuleAction>('categorize');
   const [categoryId, setCategoryId] = useState('');
-
-  const load = async () => {
-    try {
-      const [r, c] = await Promise.all([
-        categoryRuleService.list(),
-        categoryService.list(),
-      ]);
-      setRules(r);
-      setCategories(c);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falha ao carregar.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();
@@ -109,7 +84,7 @@ export default function RulesPage() {
       setAmount('');
       setCategoryId('');
       toast.success('Regra criada.');
-      await load();
+      await refreshRules();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao salvar.');
     } finally {
@@ -267,7 +242,7 @@ export default function RulesPage() {
     setBusyId(rule.id);
     try {
       await categoryRuleService.remove(rule.id);
-      await load();
+      await refreshRules();
       toast.success('Regra excluída.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao excluir.');
@@ -276,7 +251,8 @@ export default function RulesPage() {
     }
   };
 
-  if (loading) return <FullScreenLoader label="Carregando regras…" />;
+  if (loadingRules || loadingCategories)
+    return <FullScreenLoader label="Carregando regras…" />;
 
   const categorizeRules = rules.filter((r) => r.action === 'categorize');
   const ignoreRules = rules.filter((r) => r.action === 'ignore');

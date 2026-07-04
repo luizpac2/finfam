@@ -4,15 +4,11 @@ import { Pencil, Plus, Search, Trash2, Wand2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import {
-  categoryRuleService,
-  categoryService,
-  transactionService,
-} from '../services';
+import { useReferenceData } from '../hooks/useReferenceData';
+import { transactionService } from '../services';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import { applyUserRules } from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
-import type { CategoryRule } from '../domain/entities/CategoryRule';
 import type { Transaction } from '../domain/entities/Transaction';
 import { FilterSidebar } from '../components/filters/FilterSidebar';
 import { UNCATEGORIZED } from '../components/filters/CategoryFilter';
@@ -43,9 +39,7 @@ export default function TransactionsPage() {
     month: now.getMonth(),
     year: now.getFullYear(),
   });
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [rules, setRules] = useState<CategoryRule[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
+  const { categories, rules, loadingCategories } = useReferenceData();
   const [monthsWithData, setMonthsWithData] = useState<Set<string>>();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,22 +86,8 @@ export default function TransactionsPage() {
     };
   }, [searchParams, setSearchParams, toast]);
 
-  // Categorias (para o filtro lateral, os dropdowns do editor e a edição em massa).
+  // Meses com lançamentos (categorias/regras vêm do cache compartilhado).
   useEffect(() => {
-    (async () => {
-      try {
-        const [cats, ruleList] = await Promise.all([
-          categoryService.list(),
-          categoryRuleService.list(),
-        ]);
-        setCategories(cats);
-        setRules(ruleList);
-      } catch {
-        /* silencioso; o editor ainda funciona sem categorias */
-      } finally {
-        setLoadingCategories(false);
-      }
-    })();
     transactionService.monthsWithData().then(setMonthsWithData);
   }, []);
 

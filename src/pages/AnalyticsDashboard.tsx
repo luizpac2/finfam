@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useToast } from '../hooks/useToast';
-import { categoryService, transactionService } from '../services';
-import type { Category } from '../domain/entities/Category';
+import { useReferenceData } from '../hooks/useReferenceData';
+import { transactionService } from '../services';
 import type { Transaction } from '../domain/entities/Transaction';
 import { expenseByCategory } from '../domain/analytics';
 import {
@@ -49,7 +49,7 @@ const periodLabel = (p: Period) =>
 export default function AnalyticsDashboard() {
   const toast = useToast();
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  const { categories } = useReferenceData();
   const [min, setMin] = useState<Period>(CURRENT);
   const [from, setFrom] = useState<Period>(fromIndex(toIndex(CURRENT) - 11));
   const [to, setTo] = useState<Period>(CURRENT);
@@ -67,26 +67,17 @@ export default function AnalyticsDashboard() {
   const fromDate = useMemo(() => new Date(f.year, f.month, 1), [f]);
   const toDate = useMemo(() => new Date(t.year, t.month, 1), [t]);
 
-  // Categorias + menor mês com dados (para o preset "Tudo").
+  // Menor mês com dados (para o preset "Tudo"). Categorias vêm do cache.
   useEffect(() => {
     let active = true;
-    (async () => {
-      try {
-        const [cats, months] = await Promise.all([
-          categoryService.list(),
-          transactionService.monthsWithData(),
-        ]);
-        if (!active) return;
-        setCategories(cats);
-        const keys = [...months].sort();
-        if (keys[0]) {
-          const [y, m] = keys[0].split('-').map(Number);
-          setMin({ year: y, month: m - 1 });
-        }
-      } catch {
-        /* silencioso */
+    transactionService.monthsWithData().then((months) => {
+      if (!active) return;
+      const keys = [...months].sort();
+      if (keys[0]) {
+        const [y, m] = keys[0].split('-').map(Number);
+        setMin({ year: y, month: m - 1 });
       }
-    })();
+    });
     return () => {
       active = false;
     };

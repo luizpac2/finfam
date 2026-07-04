@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import {
   Check,
   ChevronRight,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import { useToast } from '../hooks/useToast';
+import { useReferenceData } from '../hooks/useReferenceData';
 import { categoryService } from '../services';
 import type { Category } from '../domain/entities/Category';
 import type { CategoryKind } from '../lib/database.types';
@@ -44,26 +45,11 @@ const inputClass =
 /** Gestão de categorias (somente Admin): tipo, subcategorias, ícone e cor. */
 export default function CategoriesPage() {
   const toast = useToast();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { categories, loadingCategories, refreshCategories } =
+    useReferenceData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [form, setForm] = useState<CategoryForm>(emptyForm);
   const [saving, setSaving] = useState(false);
-
-  const load = async () => {
-    try {
-      setCategories(await categoryService.list());
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falha ao carregar.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Categorias-raiz do tipo selecionado, candidatas a "pai" (exclui a própria).
   const parentChoices = useMemo(
@@ -97,7 +83,7 @@ export default function CategoriesPage() {
         toast.success('Categoria criada.');
       }
       resetForm();
-      await load();
+      await refreshCategories();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao salvar.');
     } finally {
@@ -122,7 +108,7 @@ export default function CategoriesPage() {
     try {
       await categoryService.remove(category.id);
       if (form.id === category.id) resetForm();
-      await load();
+      await refreshCategories();
       toast.success(`"${category.name}" excluída.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao excluir.');
@@ -131,7 +117,8 @@ export default function CategoriesPage() {
     }
   };
 
-  if (loading) return <FullScreenLoader label="Carregando categorias…" />;
+  if (loadingCategories)
+    return <FullScreenLoader label="Carregando categorias…" />;
 
   return (
     <div className="space-y-6">

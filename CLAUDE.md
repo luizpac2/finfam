@@ -46,7 +46,7 @@ src/
 ├── services/               # data access: 1 serviço por agregado (consomem supabaseClient)
 │   ├── authService, userService, categoryService, categoryRuleService, transactionService
 │   └── serviceError.ts     # ServiceError + unwrap({data,error}, ctx)
-├── context/                # AuthContext (sessão/perfil/autorização), ToastContext, ThemeContext
+├── context/                # AuthContext (sessão/perfil), ToastContext, ThemeContext, ReferenceDataContext (cache categorias+regras)
 ├── hooks/                  # useAuth, useToast, useTheme
 ├── routes/                 # AppRoutes (lazy) + ProtectedRoute (requireAdmin)
 ├── components/             # layout/ (MainLayout, Sidebar sanfonável, GlobalSearch), ui/, dashboard/, filters/, import/, transactions/
@@ -127,4 +127,6 @@ hardening · `0012` RPC `financial_summary` (resumo agregado no banco).
   (`max-w-[1700px]`), sidebar recolhível. Tema claro/escuro (ThemeContext).
 - Ao criar página: adicionar rota lazy em `AppRoutes` + item em `MainLayout.items`
   (envolver com `<ProtectedRoute requireAdmin>` se for de admin).
+- **Categorias e regras** vêm do cache `useReferenceData()` (não chame `categoryService.list`
+  direto na página). Após criar/editar/excluir, chame `refreshCategories()`/`refreshRules()`.
 - Commits: mensagem em PT-BR + trailer `Co-Authored-By: Claude ...`. Nunca commitar `.env.local`.

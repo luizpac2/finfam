@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CreditCard } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import {
-  categoryRuleService,
-  categoryService,
-  transactionService,
-} from '../services';
-import type { Category } from '../domain/entities/Category';
-import type { CategoryRule } from '../domain/entities/CategoryRule';
+import { useReferenceData } from '../hooks/useReferenceData';
+import { transactionService } from '../services';
 import { parseStatementFile } from '../lib/fileParser';
 import {
   isCardBillPayment,
@@ -44,8 +39,7 @@ export default function Import() {
   const { profile } = useAuth();
   const toast = useToast();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [rules, setRules] = useState<CategoryRule[]>([]);
+  const { categories, rules } = useReferenceData();
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [step, setStep] = useState<Step>('upload');
   const [parsing, setParsing] = useState(false);
@@ -59,30 +53,6 @@ export default function Import() {
     () => categories.filter((c) => c.kind === 'credit_card'),
     [categories]
   );
-
-  // Carrega as categorias para alimentar a inferência e os dropdowns.
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const [list, ruleList] = await Promise.all([
-          categoryService.list(),
-          categoryRuleService.list(),
-        ]);
-        if (active) {
-          setCategories(list);
-          setRules(ruleList);
-        }
-      } catch {
-        if (active) {
-          toast.error('Não foi possível carregar as categorias.');
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [toast]);
 
   const handleFile = async (file: File) => {
     setParsing(true);
