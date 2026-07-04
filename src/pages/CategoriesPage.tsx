@@ -245,19 +245,21 @@ export default function CategoriesPage() {
         </form>
       </Card>
 
-      {/* Listas por tipo — cada seção ocupa a largura e distribui em colunas */}
-      <div className="space-y-6">
+      {/* Listas por tipo: Despesas (2 colunas), Receitas e Cartões (1 cada).
+          Colunas fixas — abrir subcategorias só empurra a lista para baixo. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4 xl:items-start">
         <CategoryColumn
-          title="Receitas"
-          kind="income"
+          title="Despesas"
+          kind="expense"
           categories={categories}
           busyId={busyId}
           onEdit={startEdit}
           onRemove={remove}
+          internalColumns={2}
         />
         <CategoryColumn
-          title="Despesas"
-          kind="expense"
+          title="Receitas"
+          kind="income"
           categories={categories}
           busyId={busyId}
           onEdit={startEdit}
@@ -283,6 +285,8 @@ interface ColumnProps {
   busyId: string | null;
   onEdit: (category: Category) => void;
   onRemove: (category: Category) => void;
+  /** Nº de colunas internas (Despesas usa 2 e ocupa 2 colunas da grade). */
+  internalColumns?: 1 | 2;
 }
 
 function CategoryColumn({
@@ -292,6 +296,7 @@ function CategoryColumn({
   busyId,
   onEdit,
   onRemove,
+  internalColumns = 1,
 }: ColumnProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -312,8 +317,45 @@ function CategoryColumn({
       return next;
     });
 
+  // Divide as raízes em N listas empilhadas (estáveis ao expandir).
+  const half = Math.ceil(roots.length / 2);
+  const chunks =
+    internalColumns === 2 && roots.length > 1
+      ? [roots.slice(0, half), roots.slice(half)]
+      : [roots];
+
+  const renderRoot = (root: Category) => {
+    const children = childrenOf(root.id);
+    const isOpen = expanded.has(root.id);
+    return (
+      <li key={root.id}>
+        <CategoryRow
+          category={root}
+          busy={busyId === root.id}
+          onEdit={onEdit}
+          onRemove={onRemove}
+          expandable={children.length > 0}
+          expanded={isOpen}
+          childCount={children.length}
+          onToggleExpand={() => toggleExpand(root.id)}
+        />
+        {isOpen &&
+          children.map((child) => (
+            <CategoryRow
+              key={child.id}
+              category={child}
+              nested
+              busy={busyId === child.id}
+              onEdit={onEdit}
+              onRemove={onRemove}
+            />
+          ))}
+      </li>
+    );
+  };
+
   return (
-    <div>
+    <div className={internalColumns === 2 ? 'xl:col-span-2' : ''}>
       <div className="mb-2 flex items-center gap-2">
         <span
           className={`h-2.5 w-2.5 rounded-full ${
@@ -327,46 +369,23 @@ function CategoryColumn({
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>
         <span className="text-sm text-brand-gray">({scoped.length})</span>
       </div>
-      <Card className="overflow-hidden p-1.5">
+      <Card className="overflow-hidden p-0">
         {roots.length === 0 ? (
-          <p className="px-2 py-6 text-center text-sm text-brand-gray">
+          <p className="px-4 py-6 text-center text-sm text-brand-gray">
             Nenhuma categoria de {title.toLowerCase()} ainda.
           </p>
-        ) : (
-          <div className="gap-x-1.5 sm:columns-2 lg:columns-3 xl:columns-4">
-            {roots.map((root) => {
-              const children = childrenOf(root.id);
-              const isOpen = expanded.has(root.id);
-              return (
-                <div
-                  key={root.id}
-                  className="mb-1.5 break-inside-avoid overflow-hidden rounded-lg border border-brand-moss/10"
-                >
-                  <CategoryRow
-                    category={root}
-                    busy={busyId === root.id}
-                    onEdit={onEdit}
-                    onRemove={onRemove}
-                    expandable={children.length > 0}
-                    expanded={isOpen}
-                    childCount={children.length}
-                    onToggleExpand={() => toggleExpand(root.id)}
-                  />
-                  {isOpen &&
-                    children.map((child) => (
-                      <CategoryRow
-                        key={child.id}
-                        category={child}
-                        nested
-                        busy={busyId === child.id}
-                        onEdit={onEdit}
-                        onRemove={onRemove}
-                      />
-                    ))}
-                </div>
-              );
-            })}
+        ) : chunks.length === 2 ? (
+          <div className="grid divide-brand-moss/10 sm:grid-cols-2 sm:divide-x">
+            {chunks.map((chunk, i) => (
+              <ul key={i} className="divide-y divide-brand-moss/10">
+                {chunk.map(renderRoot)}
+              </ul>
+            ))}
           </div>
+        ) : (
+          <ul className="divide-y divide-brand-moss/10">
+            {roots.map(renderRoot)}
+          </ul>
         )}
       </Card>
     </div>
@@ -438,8 +457,7 @@ function CategoryRow({
           {childCount}
         </span>
       )}
-      {/* Ações: sempre no mobile; no desktop aparecem no hover (liberam espaço p/ o nome) */}
-      <div className="flex shrink-0 items-center gap-0.5 md:hidden md:group-hover:flex">
+      <div className="flex shrink-0 items-center gap-0.5">
         <Link
           to={`/categoria/${categorySlug(category.name)}`}
           className="rounded p-1 text-brand-gray transition hover:bg-white hover:text-brand-moss"
