@@ -249,6 +249,7 @@ export default function CategoryTransactionsPage() {
                     <tr>
                       <th className="px-4 py-2.5 font-medium">Data</th>
                       <th className="px-4 py-2.5 font-medium">Descrição</th>
+                      <th className="px-4 py-2.5 font-medium">Categoria</th>
                       <th className="px-4 py-2.5 text-right font-medium">Valor</th>
                     </tr>
                   </thead>
@@ -264,8 +265,30 @@ export default function CategoryTransactionsPage() {
                           <td className="whitespace-nowrap px-4 py-2.5 text-brand-gray">
                             {formatDate(tx.date)}
                           </td>
-                          <td className="max-w-[28rem] truncate px-4 py-2.5 font-medium text-brand-moss">
+                          <td className="max-w-[22rem] truncate px-4 py-2.5 font-medium text-brand-moss">
                             {tx.description}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {tx.category ? (
+                              <span className="inline-flex items-center gap-1.5 text-brand-moss">
+                                <span
+                                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
+                                  style={{
+                                    backgroundColor: `${tx.category.color ?? '#D8D8D8'}33`,
+                                  }}
+                                >
+                                  <CategoryIcon
+                                    name={tx.category.icon}
+                                    className="h-3 w-3"
+                                  />
+                                </span>
+                                <span className="whitespace-nowrap">
+                                  {tx.category.name}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-brand-gray">—</span>
+                            )}
                           </td>
                           <td
                             className={`whitespace-nowrap px-4 py-2.5 text-right font-semibold ${
