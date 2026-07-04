@@ -36,6 +36,16 @@ export interface FinancialSummary {
   balance: number;
 }
 
+/** Versão enxuta de transação (sem join de categoria), para operações em lote. */
+export interface TransactionLite {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: TransactionType;
+  categoryId: string | null;
+}
+
 /** Converte um termo numérico ("12,50", "12.50", "1234") em número, ou null. */
 const parseSearchAmount = (raw: string): number | null => {
   const cleaned = raw.replace(/[^\d.,-]/g, '').trim();
@@ -65,6 +75,33 @@ export const transactionService = {
     return (rows as unknown as TransactionRowWithCategory[]).map(
       mapToTransaction
     );
+  },
+
+  /**
+   * Lista enxuta (sem join de categoria e só com as colunas necessárias),
+   * para operações em lote sobre o histórico (aplicar regras, recategorizar).
+   * Reduz payload e custo do PostgREST vs. `list` com embed.
+   */
+  async listLite(filters: TransactionFilters = {}): Promise<TransactionLite[]> {
+    let query = supabase
+      .from(TABLE)
+      .select('id, date, description, amount, type, category_id')
+      .order('date', { ascending: false });
+
+    if (filters.type) query = query.eq('type', filters.type);
+    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+    if (filters.from) query = query.gte('date', filters.from);
+    if (filters.to) query = query.lte('date', filters.to);
+
+    const rows = unwrap(await query, 'listar as transações');
+    return (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+      id: r.id as string,
+      date: r.date as string,
+      description: r.description as string,
+      amount: Number(r.amount),
+      type: r.type as TransactionType,
+      categoryId: (r.category_id as string | null) ?? null,
+    }));
   },
 
   /**

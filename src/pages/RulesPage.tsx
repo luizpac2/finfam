@@ -124,7 +124,7 @@ export default function RulesPage() {
     const catName = categoryById.get(rule.categoryId)?.name ?? 'a categoria';
     setApplyingId(rule.id);
     try {
-      const all = await transactionService.list({});
+      const all = await transactionService.listLite({});
       const ids = all
         .filter(
           (tx) =>
@@ -164,7 +164,7 @@ export default function RulesPage() {
     }
     setApplyingAll(true);
     try {
-      const all = await transactionService.list({});
+      const all = await transactionService.listLite({});
       const groups = new Map<string, string[]>();
       for (const tx of all) {
         const { categoryId } = applyUserRules(tx.description, tx.amount, rules);
@@ -205,7 +205,7 @@ export default function RulesPage() {
     if (rule.action !== 'ignore') return;
     setApplyingId(rule.id);
     try {
-      const all = await transactionService.list({});
+      const all = await transactionService.listLite({});
       const ids = all
         .filter((tx) => ruleMatches(rule, tx.description, tx.amount))
         .map((tx) => tx.id);
@@ -238,7 +238,7 @@ export default function RulesPage() {
     }
     setApplyingAllIgnore(true);
     try {
-      const all = await transactionService.list({});
+      const all = await transactionService.listLite({});
       const ids = all
         .filter((tx) => applyUserRules(tx.description, tx.amount, rules).ignore)
         .map((tx) => tx.id);
