@@ -42,6 +42,7 @@ src/
 │   ├── categorizationEngine.ts # heurística por palavra-chave → categoria (dicionário)
 │   ├── ruleEngine.ts       # regras do usuário: ruleMatches(keyword+amount), applyUserRules
 │   ├── duplicateDetection.ts   # detecção de duplicatas na importação
+│   ├── installments.ts     # detecção de parcelas (N/M) na descrição + agrupamento por compra
 │   ├── analytics.ts / dashboardAnalytics.ts # agregações puras p/ gráficos
 ├── services/               # data access: 1 serviço por agregado (consomem supabaseClient)
 │   ├── authService, userService, categoryService, categoryRuleService, transactionService
@@ -50,7 +51,7 @@ src/
 ├── hooks/                  # useAuth, useToast, useTheme
 ├── routes/                 # AppRoutes (lazy) + ProtectedRoute (requireAdmin)
 ├── components/             # layout/ (MainLayout, Sidebar sanfonável, GlobalSearch), ui/, dashboard/, filters/, import/, transactions/
-└── pages/                  # Dashboard, AnalyticsDashboard, TransactionsPage, Import, CategoriesPage, RulesPage, AdminDashboard, Login, NeedInvite, NotFound
+└── pages/                  # Dashboard, AnalyticsDashboard, TransactionsPage, InstallmentsPage (/parcelamentos), Import, CategoriesPage, RulesPage, AdminDashboard, Login, NeedInvite, NotFound
 ```
 
 **Regra de ouro:** a UI nunca importa `@supabase/supabase-js`; só a camada
@@ -102,6 +103,13 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
 - **Importação:** OFX/OFC/CSV/TXT/PDF. Exclui automaticamente "BB Rende Fácil"/"Resgate
   Poupança" (aplicações automáticas) em TODOS os formatos. PDF do BB: valor com sinal `(+)/(-)`,
   histórico multilinha (ver `fileParser.parseStatementText`). Detecta duplicatas.
+- **Extrato de cartão (modo cartão no `Import`):** a convenção de sinal varia por emissor
+  (Nubank CSV: compra **positiva**; OFX de cartão: compra **negativa**). Por isso o `Import`
+  descobre o "sinal de compra" pela **maioria** das linhas → compras viram despesa ligada ao
+  cartão; o outro sinal é pagamento da fatura (excluído) ou estorno/crédito (mantido).
+- **Parcelamento:** `domain/installments.parseInstallment` detecta a parcela (ex.: "3/10")
+  na **descrição** (sem coluna nova no banco). Badge no `Import`/Transações e página
+  **Parcelamentos** (`/parcelamentos`) agrupa por compra (mesma descrição-base + total + valor).
 - **Categorização automática:** regras do usuário (`ruleEngine`) têm prioridade sobre a
   heurística (`categorizationEngine`). Categorias são específicas por tipo (receita/despesa).
 

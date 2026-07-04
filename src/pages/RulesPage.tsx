@@ -1,10 +1,20 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { Ban, Eraser, Loader2, Plus, RefreshCw, Tag, Trash2 } from 'lucide-react';
+import {
+  Ban,
+  Eraser,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Tag,
+  Trash2,
+} from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { categoryRuleService, transactionService } from '../services';
+import { normalizeText } from '../domain/categorizationEngine';
 import { applyUserRules, ruleMatches } from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
 import {
@@ -47,12 +57,36 @@ export default function RulesPage() {
   const [amount, setAmount] = useState('');
   const [action, setAction] = useState<RuleAction>('categorize');
   const [categoryId, setCategoryId] = useState('');
+  const [filter, setFilter] = useState('');
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();
     for (const c of categories) map.set(c.id, c);
     return map;
   }, [categories]);
+
+  // Ordena as regras alfabeticamente (palavra primeiro; sem palavra, por
+  // categoria/valor) e aplica o filtro inteligente por palavra/categoria/valor.
+  const prepareRules = useMemo(() => {
+    const catName = (rule: CategoryRule) =>
+      rule.categoryId
+        ? normalizeText(categoryById.get(rule.categoryId)?.name ?? '')
+        : '';
+    const haystack = (rule: CategoryRule) =>
+      normalizeText(
+        `${rule.keyword ?? ''} ${catName(rule)} ${rule.amount ?? ''}`
+      );
+    const sortKey = (rule: CategoryRule) => {
+      const kw = rule.keyword ? normalizeText(rule.keyword) : '';
+      return kw ? `0${kw}` : `1${catName(rule)}${rule.amount ?? ''}`;
+    };
+    return (list: CategoryRule[]) => {
+      const q = normalizeText(filter);
+      return list
+        .filter((r) => !q || haystack(r).includes(q))
+        .sort((a, b) => sortKey(a).localeCompare(sortKey(b), 'pt-BR'));
+    };
+  }, [categoryById, filter]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -254,20 +288,22 @@ export default function RulesPage() {
   if (loadingRules || loadingCategories)
     return <FullScreenLoader label="Carregando regras…" />;
 
-  const categorizeRules = rules.filter((r) => r.action === 'categorize');
-  const ignoreRules = rules.filter((r) => r.action === 'ignore');
+  const categorizeRules = prepareRules(
+    rules.filter((r) => r.action === 'categorize')
+  );
+  const ignoreRules = prepareRules(rules.filter((r) => r.action === 'ignore'));
+  const totalRules = rules.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <header>
         <h1 className="text-xl font-bold tracking-tight text-brand-moss sm:text-2xl">
           Regras de categorização
         </h1>
         <p className="mt-1 text-sm text-brand-gray">
-          Categorize (ou ignore) automaticamente por <strong>palavra</strong> na
-          descrição e/ou por <strong>valor</strong> do lançamento — ex.:
-          “sempre que for R$ 133,43, categorizar como Seguro”. Vale na importação
-          e no botão “Categorizar automaticamente”.
+          Categorize (ou ignore) por <strong>palavra</strong> na descrição e/ou
+          por <strong>valor</strong> — ex.: “se for R$ 133,43, categorizar como
+          Seguro”. Vale na importação e ao “Categorizar automaticamente”.
         </p>
       </header>
 
@@ -342,6 +378,20 @@ export default function RulesPage() {
           </button>
         </form>
       </Card>
+
+      {/* Filtro inteligente */}
+      {totalRules > 0 && (
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-gray" />
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filtrar por palavra, categoria ou valor…"
+            className="w-full rounded-lg border border-brand-moss/20 bg-white py-2 pl-9 pr-3 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30"
+          />
+        </div>
+      )}
 
       {/* Listas */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">

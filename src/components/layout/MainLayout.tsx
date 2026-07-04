@@ -5,6 +5,7 @@ import {
   BarChart3,
   Upload,
   Receipt,
+  Layers,
   Tags,
   Filter,
   ShieldCheck,
@@ -49,6 +50,7 @@ export function MainLayout() {
     { label: 'Visão geral', to: '/', icon: LayoutDashboard },
     { label: 'Dashboard', to: '/dashboard', icon: BarChart3 },
     { label: 'Transações', to: '/transacoes', icon: Receipt },
+    { label: 'Parcelamentos', to: '/parcelamentos', icon: Layers },
     { label: 'Importar', to: '/importar', icon: Upload },
     ...(isAdmin
       ? [

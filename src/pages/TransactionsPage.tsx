@@ -7,6 +7,7 @@ import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
+import { parseInstallment } from '../domain/installments';
 import { applyUserRules } from '../domain/ruleEngine';
 import {
   expandCategorySelection,
@@ -516,8 +517,21 @@ export default function TransactionsPage() {
                           <td className="whitespace-nowrap px-4 py-2.5 text-brand-gray">
                             {formatDate(tx.date)}
                           </td>
-                          <td className="max-w-[24rem] truncate px-4 py-2.5 font-medium text-brand-moss">
-                            {tx.description}
+                          <td className="max-w-[24rem] px-4 py-2.5 font-medium text-brand-moss">
+                            <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const inst = parseInstallment(tx.description);
+                                return inst ? (
+                                  <span
+                                    className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+                                    title={`Parcela ${inst.label}`}
+                                  >
+                                    {inst.label}
+                                  </span>
+                                ) : null;
+                              })()}
+                              <span className="truncate">{tx.description}</span>
+                            </div>
                           </td>
                           <td className="px-4 py-2.5">
                             {category ? (

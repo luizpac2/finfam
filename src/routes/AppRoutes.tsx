@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('../pages/Dashboard'));
 const AnalyticsDashboard = lazy(() => import('../pages/AnalyticsDashboard'));
 const Import = lazy(() => import('../pages/Import'));
 const TransactionsPage = lazy(() => import('../pages/TransactionsPage'));
+const InstallmentsPage = lazy(() => import('../pages/InstallmentsPage'));
 const CategoriesPage = lazy(() => import('../pages/CategoriesPage'));
 const CategoryTransactionsPage = lazy(
   () => import('../pages/CategoryTransactionsPage')
@@ -41,6 +42,7 @@ export function AppRoutes() {
           <Route path="/dashboard" element={<AnalyticsDashboard />} />
           <Route path="/importar" element={<Import />} />
           <Route path="/transacoes" element={<TransactionsPage />} />
+          <Route path="/parcelamentos" element={<InstallmentsPage />} />
           <Route
             path="/categoria/:slug"
             element={<CategoryTransactionsPage />}

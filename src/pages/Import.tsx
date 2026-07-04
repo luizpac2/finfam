@@ -11,7 +11,9 @@ import {
   isCardBillPayment,
   suggestCategoryId,
 } from '../domain/categorizationEngine';
+import { parseInstallment } from '../domain/installments';
 import { applyUserRules } from '../domain/ruleEngine';
+import type { TransactionType } from '../lib/database.types';
 import {
   detectDuplicates,
   type DuplicateReason,
@@ -78,30 +80,53 @@ export default function Import() {
         }
       }
 
+      // Extrato de cartão: descobre qual SINAL representa as compras. A
+      // convenção varia por emissor — em muitos CSV (ex.: Nubank) a compra vem
+      // com valor POSITIVO; em OFX de cartão costuma ser NEGATIVO. Como as
+      // compras são a maioria das linhas da fatura, o tipo dominante é "compra".
+      const purchaseParsedType: TransactionType | null = isCardStatement
+        ? (() => {
+            const positives = parsed.filter((t) => t.type === 'income').length;
+            return positives >= parsed.length - positives ? 'income' : 'expense';
+          })()
+        : null;
+
       // Pré-categoriza cada linha; duplicatas/ignoradas entram desmarcadas.
       // Regras do usuário têm prioridade sobre a heurística.
       const reviewed: ReviewRow[] = parsed.map((tx, index) => {
         const duplicate = duplicates.get(index);
         const rule = applyUserRules(tx.description, tx.amount, rules);
         const ignored = rule.ignore || undefined;
+        const installment = parseInstallment(tx.description) ?? undefined;
 
-        // Extrato de cartão: as compras (débitos) viram despesas ligadas ao
-        // cartão. As entradas (créditos) podem ser o pagamento da própria fatura
-        // (excluído) ou um estorno/reembolso (mantido) — distinguidos por
-        // palavra-chave.
+        // Extrato de cartão: a COMPRA (sinal dominante) vira despesa ligada ao
+        // cartão. O outro sinal é o pagamento da própria fatura (excluído) ou um
+        // estorno/reembolso (mantido) — distinguidos por palavra-chave.
         if (isCardStatement) {
-          const isCredit = tx.type === 'income';
-          const isPayment = isCredit && isCardBillPayment(tx.description);
-          const isRefund = isCredit && !isPayment;
+          const isPurchase = tx.type === purchaseParsedType;
+          if (isPurchase) {
+            return {
+              ...tx,
+              type: 'expense',
+              categoryId:
+                rule.categoryId ??
+                suggestCategoryId(tx.description, 'expense', categories),
+              cardId: selectedCardId,
+              installment,
+              ignored,
+              duplicate,
+              include: !duplicate && !rule.ignore,
+            };
+          }
+          const isPayment = isCardBillPayment(tx.description);
           return {
             ...tx,
-            categoryId: isCredit
-              ? ''
-              : rule.categoryId ??
-                suggestCategoryId(tx.description, 'expense', categories),
+            type: 'income',
+            categoryId: '',
             cardId: isPayment ? undefined : selectedCardId,
             cardPayment: isPayment || undefined,
-            cardCredit: isRefund || undefined,
+            cardCredit: !isPayment || undefined,
+            installment,
             ignored,
             duplicate,
             include: !isPayment && !duplicate && !rule.ignore,
@@ -113,6 +138,7 @@ export default function Import() {
           categoryId:
             rule.categoryId ??
             suggestCategoryId(tx.description, tx.type, categories),
+          installment,
           ignored,
           duplicate,
           include: !duplicate && !rule.ignore,

@@ -8,6 +8,7 @@ import {
 } from '../../domain/entities/Category';
 import type { DuplicateReason } from '../../domain/duplicateDetection';
 import { isCardRefund } from '../../domain/categorizationEngine';
+import type { Installment } from '../../domain/installments';
 import type { TransactionType } from '../../lib/database.types';
 import { formatCurrencyAccounting } from '../../lib/format';
 import { CategorySelect } from '../ui/CategorySelect';
@@ -25,6 +26,8 @@ export interface ReviewRow extends ParsedTransaction {
   cardPayment?: boolean;
   /** Crédito no cartão que NÃO é pagamento (estorno/reembolso) — mantido. */
   cardCredit?: boolean;
+  /** Parcela detectada na descrição (ex.: 3/10), quando parcelado. */
+  installment?: Installment;
   /** Casou com uma regra de "ignorar" — desmarcada por padrão. */
   ignored?: boolean;
 }
@@ -265,6 +268,14 @@ export function ReviewTransactions({
                         {row.cardCredit && (
                           <span className="shrink-0 rounded-full bg-brand-aqua/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-moss">
                             {isCardRefund(row.description) ? 'Estorno' : 'Crédito'}
+                          </span>
+                        )}
+                        {row.installment && (
+                          <span
+                            className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700"
+                            title={`Parcela ${row.installment.label}`}
+                          >
+                            Parc {row.installment.label}
                           </span>
                         )}
                         {isDup && (
