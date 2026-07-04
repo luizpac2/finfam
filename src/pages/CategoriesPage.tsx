@@ -133,105 +133,86 @@ export default function CategoriesPage() {
         </p>
       </header>
 
-      {/* Formulário (criar / editar) */}
-      <Card>
-        <h2 className="mb-4 text-base font-semibold text-brand-moss">
+      {/* Formulário (criar / editar) — compacto, 2 linhas */}
+      <Card className="p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-gray">
           {form.id ? 'Editar categoria' : 'Nova categoria'}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="lg:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Nome
-              </span>
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-2">
+          {/* Linha 1: nome · tipo · categoria pai */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
               <input
                 type="text"
                 required
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Ex.: Alimentação"
+                placeholder="Nome da categoria"
+                aria-label="Nome"
                 className={inputClass}
               />
-            </label>
-
-            <div>
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Tipo
-              </span>
-              <div className="grid grid-cols-3 gap-1 rounded-lg bg-brand-light p-1">
-                {(['income', 'expense', 'credit_card'] as CategoryKind[]).map(
-                  (k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      disabled={Boolean(form.parentId)}
-                      onClick={() =>
-                        setForm((f) => ({ ...f, kind: k, parentId: '' }))
-                      }
-                      className={`rounded-md px-1 py-1.5 text-sm font-medium transition disabled:opacity-60 ${
-                        (form.parentId
-                          ? parentChoices.find((c) => c.id === form.parentId)
-                              ?.kind
-                          : form.kind) === k
-                          ? 'bg-white text-brand-moss shadow-sm'
-                          : 'text-brand-gray'
-                      }`}
-                    >
-                      {k === 'income'
-                        ? 'Receita'
-                        : k === 'expense'
-                          ? 'Despesa'
-                          : 'Cartão'}
-                    </button>
-                  )
-                )}
-              </div>
             </div>
-
-            <label>
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Categoria pai
-              </span>
+            <div className="flex shrink-0 rounded-lg bg-brand-light p-0.5">
+              {(['income', 'expense', 'credit_card'] as CategoryKind[]).map(
+                (k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    disabled={Boolean(form.parentId)}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, kind: k, parentId: '' }))
+                    }
+                    className={`rounded-md px-2.5 py-1.5 text-sm font-medium transition disabled:opacity-60 ${
+                      (form.parentId
+                        ? parentChoices.find((c) => c.id === form.parentId)?.kind
+                        : form.kind) === k
+                        ? 'bg-white text-brand-moss shadow-sm'
+                        : 'text-brand-gray'
+                    }`}
+                  >
+                    {k === 'income'
+                      ? 'Receita'
+                      : k === 'expense'
+                        ? 'Despesa'
+                        : 'Cartão'}
+                  </button>
+                )
+              )}
+            </div>
+            <div className="sm:w-48">
               <select
                 value={form.parentId}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, parentId: e.target.value }))
                 }
+                aria-label="Categoria pai"
                 className={inputClass}
               >
-                <option value="">Nenhuma (principal)</option>
+                <option value="">Sem categoria pai</option>
                 {parentChoices.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Ícone
-              </span>
-              <IconPicker
-                value={form.icon}
-                color={form.color}
-                onChange={(icon) => setForm((f) => ({ ...f, icon }))}
-              />
-            </div>
-            <label>
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Cor
-              </span>
-              <input
-                type="color"
-                value={form.color}
-                onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
-                className="h-[38px] w-14 cursor-pointer rounded-lg border border-brand-moss/25 bg-white p-1"
-                aria-label="Cor"
-              />
-            </label>
+          {/* Linha 2: ícone · cor · ações */}
+          <div className="flex flex-wrap items-center gap-2">
+            <IconPicker
+              value={form.icon}
+              color={form.color}
+              onChange={(icon) => setForm((f) => ({ ...f, icon }))}
+            />
+            <input
+              type="color"
+              value={form.color}
+              onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
+              className="h-[38px] w-11 cursor-pointer rounded-lg border border-brand-moss/25 bg-white p-1"
+              aria-label="Cor"
+            />
+            <span className="text-xs text-brand-gray">Ícone e cor</span>
 
             <div className="ml-auto flex items-center gap-2">
               {form.id && (
@@ -239,7 +220,7 @@ export default function CategoriesPage() {
                   type="button"
                   onClick={resetForm}
                   disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-lg border border-brand-moss/25 px-4 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
+                  className="inline-flex items-center gap-1 rounded-lg border border-brand-moss/25 px-3 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
                 >
                   <X className="h-4 w-4" />
                   Cancelar
@@ -346,20 +327,20 @@ function CategoryColumn({
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>
         <span className="text-sm text-brand-gray">({scoped.length})</span>
       </div>
-      <Card className="overflow-hidden p-2">
+      <Card className="overflow-hidden p-1.5">
         {roots.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-brand-gray">
             Nenhuma categoria de {title.toLowerCase()} ainda.
           </p>
         ) : (
-          <div className="gap-x-2 sm:columns-2 xl:columns-3 2xl:columns-4">
+          <div className="gap-x-1.5 sm:columns-2 lg:columns-3 xl:columns-4">
             {roots.map((root) => {
               const children = childrenOf(root.id);
               const isOpen = expanded.has(root.id);
               return (
                 <div
                   key={root.id}
-                  className="mb-1 break-inside-avoid overflow-hidden rounded-lg border border-brand-moss/10"
+                  className="mb-1.5 break-inside-avoid overflow-hidden rounded-lg border border-brand-moss/10"
                 >
                   <CategoryRow
                     category={root}
@@ -418,57 +399,52 @@ function CategoryRow({
 }: RowProps) {
   return (
     <div
-      className={`flex items-center justify-between px-4 py-2.5 ${
-        nested ? 'border-t border-brand-moss/5 bg-brand-light/40 pl-10' : ''
+      className={`group flex items-center gap-1.5 px-2 py-1.5 ${
+        nested ? 'border-t border-brand-moss/5 bg-brand-light/40 pl-7' : ''
       }`}
     >
-      <div className="flex min-w-0 items-center gap-2.5">
-        {!nested &&
-          (expandable ? (
-            <button
-              type="button"
-              onClick={onToggleExpand}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-brand-gray transition hover:bg-brand-light hover:text-brand-moss"
-              aria-label={expanded ? 'Recolher subcategorias' : 'Expandir subcategorias'}
-              aria-expanded={expanded}
-            >
-              <ChevronRight
-                className={`h-4 w-4 transition-transform ${
-                  expanded ? 'rotate-90' : ''
-                }`}
-              />
-            </button>
-          ) : (
-            <span className="h-6 w-6 shrink-0" />
-          ))}
-        <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-          style={{ backgroundColor: `${category.color ?? '#D8D8D8'}33` }}
-        >
-          <CategoryIcon
-            name={category.icon}
-            className="h-4 w-4"
-          />
+      {!nested &&
+        (expandable ? (
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-brand-gray transition hover:text-brand-moss"
+            aria-label={expanded ? 'Recolher subcategorias' : 'Expandir subcategorias'}
+            aria-expanded={expanded}
+          >
+            <ChevronRight
+              className={`h-3.5 w-3.5 transition-transform ${
+                expanded ? 'rotate-90' : ''
+              }`}
+            />
+          </button>
+        ) : (
+          <span className="h-5 w-5 shrink-0" />
+        ))}
+      <span
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+        style={{ backgroundColor: `${category.color ?? '#D8D8D8'}33` }}
+      >
+        <CategoryIcon name={category.icon} className="h-3.5 w-3.5" />
+      </span>
+      <span
+        className="min-w-0 flex-1 truncate text-sm font-medium text-brand-moss"
+        title={category.name}
+      >
+        {category.name}
+      </span>
+      {expandable && (
+        <span className="shrink-0 rounded-full bg-brand-light px-1.5 text-[11px] text-brand-gray">
+          {childCount}
         </span>
-        <span className="truncate text-sm font-medium text-brand-moss">
-          {category.name}
-        </span>
-        {expandable && (
-          <span className="shrink-0 rounded-full bg-brand-light px-1.5 text-xs text-brand-gray">
-            {childCount}
-          </span>
-        )}
-        <span
-          className="h-2 w-2 shrink-0 rounded-full ring-1 ring-brand-moss/10"
-          style={{ backgroundColor: category.color ?? '#D8D8D8' }}
-        />
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
+      )}
+      {/* Ações: sempre no mobile; no desktop aparecem no hover (liberam espaço p/ o nome) */}
+      <div className="flex shrink-0 items-center gap-0.5 md:hidden md:group-hover:flex">
         <Link
           to={`/categoria/${categorySlug(category.name)}`}
-          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss"
+          className="rounded p-1 text-brand-gray transition hover:bg-white hover:text-brand-moss"
           aria-label={`Ver lançamentos de ${category.name}`}
-          title="Ver lançamentos desta categoria"
+          title="Ver lançamentos"
         >
           <Receipt className="h-4 w-4" />
         </Link>
@@ -476,7 +452,7 @@ function CategoryRow({
           type="button"
           onClick={() => onEdit(category)}
           disabled={busy}
-          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss disabled:opacity-50"
+          className="rounded p-1 text-brand-gray transition hover:bg-white hover:text-brand-moss disabled:opacity-50"
           aria-label={`Editar ${category.name}`}
         >
           <Pencil className="h-4 w-4" />
@@ -485,7 +461,7 @@ function CategoryRow({
           type="button"
           onClick={() => onRemove(category)}
           disabled={busy}
-          className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-red-600 disabled:opacity-50"
+          className="rounded p-1 text-brand-gray transition hover:bg-white hover:text-red-600 disabled:opacity-50"
           aria-label={`Excluir ${category.name}`}
         >
           {busy ? (
