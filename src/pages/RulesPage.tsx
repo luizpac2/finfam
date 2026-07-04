@@ -271,96 +271,80 @@ export default function RulesPage() {
         </p>
       </header>
 
-      {/* Formulário */}
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <label className="lg:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Palavra na descrição{' '}
-                <span className="font-normal text-brand-gray">(opcional)</span>
-              </span>
-              <input
-                type="text"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder="Ex.: Luz, ENEL, Netflix…"
-                className={inputClass}
-              />
-            </label>
-
-            <label>
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Valor{' '}
-                <span className="font-normal text-brand-gray">(opcional)</span>
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="Ex.: 133,43"
-                className={`${inputClass} text-right`}
-              />
-            </label>
-
-            <div>
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Ação
-              </span>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-brand-light p-1">
-                {(['categorize', 'ignore'] as RuleAction[]).map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => setAction(a)}
-                    className={`rounded-md px-1 py-1.5 text-sm font-medium transition ${
-                      action === a
-                        ? 'bg-white text-brand-moss shadow-sm'
-                        : 'text-brand-gray'
-                    }`}
-                  >
-                    {a === 'categorize' ? 'Categorizar' : 'Ignorar'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="lg:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-brand-moss">
-                Categoria
-              </span>
-              <CategorySelect
-                value={categoryId}
-                onChange={setCategoryId}
-                categories={categories}
-                disabled={action === 'ignore'}
-                placeholder={action === 'ignore' ? '— (ignorar)' : 'Selecione…'}
-                className="py-2"
-              />
-            </label>
+      {/* Formulário — compacto */}
+      <Card className="p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-gray">
+          Nova regra
+        </p>
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <div className="min-w-[11rem] flex-1">
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Palavra na descrição (opcional)"
+              aria-label="Palavra na descrição"
+              className={inputClass}
+            />
           </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-              Adicionar regra
-            </button>
+          <div className="w-28">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="Valor"
+              aria-label="Valor"
+              className={`${inputClass} text-right`}
+            />
           </div>
+          <div className="flex shrink-0 rounded-lg bg-brand-light p-0.5">
+            {(['categorize', 'ignore'] as RuleAction[]).map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setAction(a)}
+                className={`rounded-md px-2.5 py-1.5 text-sm font-medium transition ${
+                  action === a
+                    ? 'bg-white text-brand-moss shadow-sm'
+                    : 'text-brand-gray'
+                }`}
+              >
+                {a === 'categorize' ? 'Categorizar' : 'Ignorar'}
+              </button>
+            ))}
+          </div>
+          <div className="w-full sm:w-56">
+            <CategorySelect
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={categories}
+              disabled={action === 'ignore'}
+              placeholder={action === 'ignore' ? '— (ignorar)' : 'Categoria…'}
+              className="py-2"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="ml-auto inline-flex items-center gap-2 rounded-lg bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Adicionar
+          </button>
         </form>
       </Card>
 
       {/* Listas */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <RuleColumn
           title="Categorizar"
           icon={Tag}
@@ -526,7 +510,7 @@ function RuleRow({
   const isDelete = applyIcon === 'delete';
   const label = ruleConditionLabel({ keyword, amount }, formatCurrency);
   return (
-    <li className="flex items-center justify-between gap-3 px-4 py-2.5">
+    <li className="flex items-center justify-between gap-3 px-4 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <div className="flex shrink-0 flex-wrap items-center gap-1">
           {keyword && (
