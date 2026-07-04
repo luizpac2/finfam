@@ -53,6 +53,15 @@ export interface CategoryOption {
   depth: number;
 }
 
+/** Slug legível para URLs (ex.: "Energia Elétrica" → "energia-eletrica"). */
+export const categorySlug = (name: string): string =>
+  name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
 const byName = (a: Category, b: Category) => a.name.localeCompare(b.name, 'pt-BR');
 
 /**

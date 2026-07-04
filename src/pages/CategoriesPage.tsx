@@ -14,7 +14,7 @@ import {
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { categoryService } from '../services';
-import type { Category } from '../domain/entities/Category';
+import { categorySlug, type Category } from '../domain/entities/Category';
 import type { CategoryKind } from '../lib/database.types';
 import { Card } from '../components/ui/Card';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
@@ -465,7 +465,7 @@ function CategoryRow({
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <Link
-          to={`/categoria/${category.id}`}
+          to={`/categoria/${categorySlug(category.name)}`}
           className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss"
           aria-label={`Ver lançamentos de ${category.name}`}
           title="Ver lançamentos desta categoria"

@@ -6,6 +6,7 @@ import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
 import type { Transaction } from '../domain/entities/Transaction';
+import { categorySlug } from '../domain/entities/Category';
 import type { Period } from '../components/filters/PeriodNavigator';
 import { Card } from '../components/ui/Card';
 import { CategoryIcon } from '../lib/categoryIcons';
@@ -32,24 +33,25 @@ type TypeFilter = 'all' | 'income' | 'expense';
 
 /** Lista paginada de TODOS os lançamentos de uma categoria, com filtros. */
 export default function CategoryTransactionsPage() {
-  const { categoryId = '' } = useParams();
+  const { slug = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { categories } = useReferenceData();
+  const { categories, loadingCategories } = useReferenceData();
 
   const category = useMemo(
-    () => categories.find((c) => c.id === categoryId),
-    [categories, categoryId]
+    () => categories.find((c) => categorySlug(c.name) === slug),
+    [categories, slug]
   );
 
   // Ver uma categoria inclui as subcategorias; uma subcategoria mostra só ela.
   const categoryIds = useMemo(() => {
+    if (!category) return [];
     const childIds = categories
-      .filter((c) => c.parentId === categoryId)
+      .filter((c) => c.parentId === category.id)
       .map((c) => c.id);
-    return [categoryId, ...childIds];
-  }, [categories, categoryId]);
-  const childCount = categoryIds.length - 1;
+    return [category.id, ...childIds];
+  }, [categories, category]);
+  const childCount = Math.max(categoryIds.length - 1, 0);
 
   const [from, setFrom] = useState<Period>(ALL_TIME);
   const [to, setTo] = useState<Period>(CURRENT);
@@ -85,6 +87,7 @@ export default function CategoryTransactionsPage() {
 
   // Totais do conjunto filtrado (consulta enxuta).
   useEffect(() => {
+    if (filters.categoryIds.length === 0) return;
     let active = true;
     transactionService
       .filteredTotals(filters)
@@ -97,6 +100,12 @@ export default function CategoryTransactionsPage() {
 
   // Página atual (server-side).
   useEffect(() => {
+    if (filters.categoryIds.length === 0) {
+      setRows([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     transactionService
@@ -133,6 +142,30 @@ export default function CategoryTransactionsPage() {
   ];
 
   const years = Array.from({ length: CURRENT.year - 2000 + 1 }, (_, i) => 2000 + i).reverse();
+
+  if (!category) {
+    return (
+      <div className="space-y-6">
+        <header className="flex items-center gap-3">
+          <Link
+            to="/categorias"
+            className="rounded-lg p-1.5 text-brand-gray transition hover:bg-brand-light hover:text-brand-moss"
+            aria-label="Voltar para Categorias"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-xl font-bold tracking-tight text-brand-moss sm:text-2xl">
+            Categoria
+          </h1>
+        </header>
+        <Card>
+          <p className="px-2 py-8 text-center text-sm text-brand-gray">
+            {loadingCategories ? 'Carregando…' : 'Categoria não encontrada.'}
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -270,7 +303,17 @@ export default function CategoryTransactionsPage() {
                           </td>
                           <td className="px-4 py-2.5">
                             {tx.category ? (
-                              <span className="inline-flex items-center gap-1.5 text-brand-moss">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(
+                                    `/categoria/${categorySlug(tx.category!.name)}`
+                                  );
+                                }}
+                                title={`Ver só ${tx.category.name}`}
+                                className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-brand-moss transition hover:bg-brand-light"
+                              >
                                 <span
                                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
                                   style={{
@@ -285,7 +328,7 @@ export default function CategoryTransactionsPage() {
                                 <span className="whitespace-nowrap">
                                   {tx.category.name}
                                 </span>
-                              </span>
+                              </button>
                             ) : (
                               <span className="text-brand-gray">—</span>
                             )}

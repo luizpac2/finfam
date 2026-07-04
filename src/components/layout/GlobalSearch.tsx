@@ -5,6 +5,7 @@ import { Loader2, Search, X } from 'lucide-react';
 import { transactionService } from '../../services';
 import { useReferenceData } from '../../hooks/useReferenceData';
 import type { Transaction } from '../../domain/entities/Transaction';
+import { categorySlug } from '../../domain/entities/Category';
 import { normalizeText } from '../../domain/categorizationEngine';
 import { CategoryKindLabel } from '../../domain/constants';
 import { CategoryIcon } from '../../lib/categoryIcons';
@@ -72,9 +73,9 @@ export function GlobalSearch() {
     close();
     navigate(`/transacoes?tx=${id}`);
   };
-  const openCat = (id: string) => {
+  const openCat = (name: string) => {
     close();
-    navigate(`/categoria/${id}`);
+    navigate(`/categoria/${categorySlug(name)}`);
   };
 
   const showPanel = open && q.length >= 2;
@@ -125,7 +126,7 @@ export function GlobalSearch() {
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => openCat(c.id)}
+                  onClick={() => openCat(c.name)}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-brand-light"
                 >
                   <span

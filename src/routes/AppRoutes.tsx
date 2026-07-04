@@ -42,7 +42,7 @@ export function AppRoutes() {
           <Route path="/importar" element={<Import />} />
           <Route path="/transacoes" element={<TransactionsPage />} />
           <Route
-            path="/categoria/:categoryId"
+            path="/categoria/:slug"
             element={<CategoryTransactionsPage />}
           />
           <Route
