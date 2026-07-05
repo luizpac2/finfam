@@ -210,11 +210,18 @@ export default function AnalyticsDashboard() {
               {loading ? <Loading /> : <CumulativeBalanceChart data={cumulative} />}
             </Panel>
 
-            <Panel title="Despesas por categoria" subtitle={rangeLabel}>
+            <Panel
+              title="Despesas por categoria"
+              subtitle={rangeLabel}
+              className="xl:col-span-2"
+            >
               {loading ? <Loading /> : <CategoryBarChart data={topCats} />}
             </Panel>
 
-            <Panel title="Maiores categorias de despesa">
+            <Panel
+              title="Maiores categorias de despesa"
+              className="xl:col-span-2"
+            >
               {loading ? <Loading /> : <TopCategoriesChart data={topCats} />}
             </Panel>
 

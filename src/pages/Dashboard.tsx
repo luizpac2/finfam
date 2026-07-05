@@ -296,28 +296,26 @@ export default function Dashboard() {
               )}
             </Panel>
 
-            <div className="grid gap-4 sm:gap-5 xl:grid-cols-2">
-              <Panel title="Despesas por categoria" subtitle="Total no período">
-                {loading ? (
-                  <BarChartSkeleton />
-                ) : (
-                  <CategoryBarChart data={topCats} valueLabel="Total" />
-                )}
-              </Panel>
+            <Panel title="Despesas por categoria" subtitle="Total no período">
+              {loading ? (
+                <BarChartSkeleton />
+              ) : (
+                <CategoryBarChart data={topCats} valueLabel="Total" />
+              )}
+            </Panel>
 
-              <Panel
-                title="Média mensal por categoria"
-                subtitle={`Por mês · ${monthsCount} ${
-                  monthsCount === 1 ? 'mês' : 'meses'
-                }`}
-              >
-                {loading ? (
-                  <BarChartSkeleton />
-                ) : (
-                  <CategoryBarChart data={avgCats} valueLabel="Média/mês" />
-                )}
-              </Panel>
-            </div>
+            <Panel
+              title="Média mensal por categoria"
+              subtitle={`Por mês · ${monthsCount} ${
+                monthsCount === 1 ? 'mês' : 'meses'
+              }`}
+            >
+              {loading ? (
+                <BarChartSkeleton />
+              ) : (
+                <CategoryBarChart data={avgCats} valueLabel="Média/mês" />
+              )}
+            </Panel>
           </section>
         </div>
       </div>
