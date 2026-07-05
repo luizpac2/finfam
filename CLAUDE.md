@@ -109,7 +109,10 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   cartão; o outro sinal é pagamento da fatura (excluído) ou estorno/crédito (mantido).
 - **Parcelamento:** `domain/installments.parseInstallment` detecta a parcela (ex.: "3/10")
   na **descrição** (sem coluna nova no banco). Badge no `Import`/Transações e página
-  **Parcelamentos** (`/parcelamentos`) agrupa por compra (mesma descrição-base + total + valor).
+  **Parcelamentos** (`/parcelamentos`) com filtros (busca, situação, cartão, ordenação),
+  agrupa por compra (mesma descrição-base + total + valor). Como o extrato repete a **data
+  da compra** em toda parcela, `installmentSchedule`/`addMonths` estimam a data de cobrança
+  de cada parcela (compra + (n-1) meses) e projetam as parcelas futuras.
 - **Categorização automática:** regras do usuário (`ruleEngine`) têm prioridade sobre a
   heurística (`categorizationEngine`). Categorias são específicas por tipo (receita/despesa).
 

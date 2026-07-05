@@ -6,10 +6,27 @@ import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
 import type { Transaction } from '../domain/entities/Transaction';
 import { normalizeText } from '../domain/categorizationEngine';
-import { groupInstallments, type InstallmentGroup } from '../domain/installments';
+import {
+  groupInstallments,
+  installmentSchedule,
+  type InstallmentGroup,
+} from '../domain/installments';
 import { CategoryIcon } from '../lib/categoryIcons';
-import { formatCurrency, formatDate } from '../lib/format';
+import { formatCurrency } from '../lib/format';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
+
+const MONTH_FMT = new Intl.DateTimeFormat('pt-BR', {
+  month: 'short',
+  year: '2-digit',
+});
+
+/** Rótulo curto de mês/ano a partir de uma data ISO (ex.: "Jul/25"). */
+const monthLabel = (iso: string): string => {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-').map(Number);
+  const s = MONTH_FMT.format(new Date(y, m - 1, d || 1)).replace('.', '');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
 
 type Situacao = 'all' | 'ongoing' | 'done';
 type SortBy = 'remaining' | 'total' | 'progress' | 'alpha';
@@ -324,6 +341,12 @@ function PurchaseCard({
   const pct = Math.round((group.lastCurrent / group.total) * 100);
   const category = group.items.find((t) => t.category)?.category;
 
+  const schedule = useMemo(
+    () => installmentSchedule(group.items, group.total, group.lastCurrent),
+    [group]
+  );
+  const next = schedule.find((e) => !e.paid);
+
   return (
     <div className="rounded-2xl border border-brand-moss/10 bg-white p-4 shadow-card">
       <div className="flex items-start justify-between gap-3">
@@ -363,11 +386,18 @@ function PurchaseCard({
       </div>
 
       {/* Progresso */}
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-brand-light">
-        <div
-          className={`h-full rounded-full ${done ? 'bg-brand-income' : 'bg-brand-aqua'}`}
-          style={{ width: `${pct}%` }}
-        />
+      <div className="mt-3 flex items-center gap-2">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-brand-light">
+          <div
+            className={`h-full rounded-full ${done ? 'bg-brand-income' : 'bg-brand-aqua'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {next && (
+          <span className="shrink-0 text-xs text-brand-gray">
+            Próxima <strong className="text-brand-moss">{monthLabel(next.date)}</strong>
+          </span>
+        )}
       </div>
 
       {/* Números */}
@@ -381,21 +411,34 @@ function PurchaseCard({
         />
       </dl>
 
-      {/* Parcelas lançadas */}
+      {/* Cronograma de cobrança (datas estimadas por parcela) */}
       <details className="mt-3 border-t border-brand-moss/10 pt-2">
         <summary className="cursor-pointer text-xs font-medium text-brand-gray transition hover:text-brand-moss">
-          {group.items.length} parcela(s) lançada(s)
+          Cronograma das {group.total} parcelas
         </summary>
-        <ul className="mt-2 space-y-1">
-          {group.items.map((tx) => (
+        <ul className="mt-2 space-y-0.5">
+          {schedule.map((e) => (
             <li
-              key={tx.id}
-              className="flex items-center justify-between gap-2 text-xs text-brand-gray"
+              key={e.current}
+              className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs ${
+                e.paid ? 'text-brand-gray' : 'bg-brand-light/50 text-brand-moss'
+              }`}
             >
-              <span className="tabular-nums">{formatDate(tx.date)}</span>
-              <span className="truncate">{tx.description}</span>
-              <span className="shrink-0 font-medium text-brand-expense">
-                {formatCurrency(tx.amount)}
+              <span className="w-10 shrink-0 tabular-nums">
+                {e.current}/{group.total}
+              </span>
+              <span className="w-16 shrink-0 tabular-nums">
+                {monthLabel(e.date)}
+              </span>
+              <span className="flex-1 text-right font-medium">
+                {formatCurrency(group.amount)}
+              </span>
+              <span
+                className={`w-16 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide ${
+                  e.paid ? 'text-brand-gray/70' : 'text-brand-aqua'
+                }`}
+              >
+                {e.paid ? 'Lançada' : 'Prevista'}
               </span>
             </li>
           ))}

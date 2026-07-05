@@ -157,3 +157,63 @@ export const groupInstallments = <
     return b.amount * b.total - a.amount * a.total; // depois pelo maior valor
   });
 };
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Soma `n` meses a uma data ISO (YYYY-MM-DD), com clamp do dia no fim do mês. */
+export const addMonths = (iso: string, n: number): string => {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m) return '';
+  const base = new Date(y, m - 1 + n, 1);
+  const year = base.getFullYear();
+  const month = base.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return `${year}-${pad(month + 1)}-${pad(Math.min(d || 1, lastDay))}`;
+};
+
+export interface ScheduleEntry {
+  /** Número da parcela (1-based). */
+  current: number;
+  /** Data estimada da cobrança (ISO), ou '' se não der para estimar. */
+  date: string;
+  /** Já lançada (nº ≤ última parcela vista). */
+  paid: boolean;
+}
+
+/**
+ * Monta o cronograma de cobrança das parcelas (1..total). Nas faturas de cartão
+ * a linha da parcela costuma repetir a **data da compra** — então estimamos a
+ * cobrança de cada parcela como "data da compra + (n-1) meses". Se as datas já
+ * vierem espalhadas (um mês por parcela), retrocede a partir da menor parcela
+ * para achar a data da compra e mantém o mesmo espaçamento.
+ */
+export const installmentSchedule = (
+  items: Array<{ date: string; description: string }>,
+  total: number,
+  lastCurrent: number
+): ScheduleEntry[] => {
+  const withCurrent = items
+    .map((it) => ({
+      date: it.date,
+      current: parseInstallment(it.description)?.current ?? 1,
+    }))
+    .sort((a, b) => a.current - b.current);
+
+  const distinctDates = new Set(items.map((it) => it.date));
+  const first = withCurrent[0];
+  const purchaseDate = first
+    ? distinctDates.size <= 1
+      ? first.date // extrato repete a data da compra em todas as parcelas
+      : addMonths(first.date, -(first.current - 1)) // datas já espalhadas
+    : '';
+
+  const schedule: ScheduleEntry[] = [];
+  for (let n = 1; n <= total; n += 1) {
+    schedule.push({
+      current: n,
+      date: purchaseDate ? addMonths(purchaseDate, n - 1) : '',
+      paid: n <= lastCurrent,
+    });
+  }
+  return schedule;
+};
