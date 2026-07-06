@@ -156,6 +156,20 @@ export const transactionService = {
   },
 
   /**
+   * Indica se a coluna `manual_category` já existe (migração 0013 aplicada).
+   * Usado para decidir o modo de "Aplicar ao histórico": com a coluna, preserva
+   * só as edições manuais; sem ela, entra em modo seguro (não sobrescreve nada
+   * já categorizado), evitando perder ajustes feitos à mão.
+   */
+  async hasManualCategoryColumn(): Promise<boolean> {
+    const { error } = await supabase
+      .from(TABLE)
+      .select('manual_category')
+      .limit(1);
+    return !isMissingManualColumn(error);
+  },
+
+  /**
    * Busca inteligente de lançamentos por descrição e/ou valor.
    * Se o termo for numérico, também casa pelo valor exato.
    */

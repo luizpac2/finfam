@@ -32,6 +32,20 @@ const inputClass =
   'w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua focus:ring-2 focus:ring-brand-aqua/30';
 
 /**
+ * Decide se um lançamento deve ser PRESERVADO da aplicação de regras ao
+ * histórico (não sobrescrever/excluir):
+ *  - sempre que a categoria foi definida à mão (`manualCategory`);
+ *  - e, quando a coluna `manual_category` ainda não existe (migração 0013 não
+ *    aplicada), em MODO SEGURO: preserva tudo que já tem categoria, para nunca
+ *    apagar uma edição manual.
+ */
+const isCategoryLocked = (
+  tx: { manualCategory: boolean; categoryId: string | null },
+  hasManualColumn: boolean
+): boolean =>
+  tx.manualCategory || (!hasManualColumn && tx.categoryId !== null);
+
+/**
  * Gestão de regras de categorização por palavra-chave (somente Admin):
  *   - "categorizar": palavra na descrição → categoria.
  *   - "ignorar": palavra na descrição → ignora o lançamento na importação.
@@ -133,11 +147,12 @@ export default function RulesPage() {
     const catName = categoryById.get(rule.categoryId)?.name ?? 'a categoria';
     setApplyingId(rule.id);
     try {
+      const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
       const ids = all
         .filter(
           (tx) =>
-            !tx.manualCategory && // não sobrescreve categorias definidas à mão
+            !isCategoryLocked(tx, hasManual) && // preserva edições manuais
             tx.categoryId !== rule.categoryId &&
             ruleMatches(rule, tx.description, tx.amount)
         )
@@ -174,10 +189,11 @@ export default function RulesPage() {
     }
     setApplyingAll(true);
     try {
+      const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
       const groups = new Map<string, string[]>();
       for (const tx of all) {
-        if (tx.manualCategory) continue; // preserva categorias definidas à mão
+        if (isCategoryLocked(tx, hasManual)) continue; // preserva edições manuais
         const { categoryId } = applyUserRules(tx.description, tx.amount, rules);
         if (!categoryId || tx.categoryId === categoryId) continue;
         const list = groups.get(categoryId) ?? [];
@@ -216,11 +232,12 @@ export default function RulesPage() {
     if (rule.action !== 'ignore') return;
     setApplyingId(rule.id);
     try {
+      const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
       const ids = all
         .filter(
           (tx) =>
-            !tx.manualCategory && // não exclui o que foi curado à mão
+            !isCategoryLocked(tx, hasManual) && // não exclui o que foi curado à mão
             ruleMatches(rule, tx.description, tx.amount)
         )
         .map((tx) => tx.id);
@@ -253,11 +270,12 @@ export default function RulesPage() {
     }
     setApplyingAllIgnore(true);
     try {
+      const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
       const ids = all
         .filter(
           (tx) =>
-            !tx.manualCategory &&
+            !isCategoryLocked(tx, hasManual) &&
             applyUserRules(tx.description, tx.amount, rules).ignore
         )
         .map((tx) => tx.id);
