@@ -16,6 +16,8 @@ export interface Transaction {
   categoryId: string | null;
   cardId: string | null; // cartão de crédito da compra (importação de fatura)
   userId: string;
+  /** true quando a categoria foi definida manualmente (regras não sobrescrevem). */
+  manualCategory: boolean;
   category: Category | null; // categoria expandida (join opcional)
   createdAt: string;
 }
@@ -29,6 +31,7 @@ export interface TransactionInput {
   categoryId?: string | null;
   cardId?: string | null;
   userId: string;
+  manualCategory?: boolean;
 }
 
 /** Mapeia uma linha de `transactions` (com categoria embutida) para o domínio. */
@@ -44,6 +47,8 @@ export const mapToTransaction = (
   categoryId: row.category_id,
   cardId: row.card_id,
   userId: row.user_id,
+  // Tolerante à migração 0013 ainda não aplicada (coluna ausente → false).
+  manualCategory: Boolean(row.manual_category),
   category: row.categories ? mapToCategory(row.categories) : null,
   createdAt: row.created_at,
 });
@@ -61,5 +66,7 @@ export const mapToTransactionRow = (
   if (input.categoryId !== undefined) row.category_id = input.categoryId;
   if (input.cardId !== undefined) row.card_id = input.cardId;
   if (input.userId !== undefined) row.user_id = input.userId;
+  if (input.manualCategory !== undefined)
+    row.manual_category = input.manualCategory;
   return row;
 };

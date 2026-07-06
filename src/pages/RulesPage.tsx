@@ -137,6 +137,7 @@ export default function RulesPage() {
       const ids = all
         .filter(
           (tx) =>
+            !tx.manualCategory && // não sobrescreve categorias definidas à mão
             tx.categoryId !== rule.categoryId &&
             ruleMatches(rule, tx.description, tx.amount)
         )
@@ -176,6 +177,7 @@ export default function RulesPage() {
       const all = await transactionService.listLite({});
       const groups = new Map<string, string[]>();
       for (const tx of all) {
+        if (tx.manualCategory) continue; // preserva categorias definidas à mão
         const { categoryId } = applyUserRules(tx.description, tx.amount, rules);
         if (!categoryId || tx.categoryId === categoryId) continue;
         const list = groups.get(categoryId) ?? [];
@@ -216,7 +218,11 @@ export default function RulesPage() {
     try {
       const all = await transactionService.listLite({});
       const ids = all
-        .filter((tx) => ruleMatches(rule, tx.description, tx.amount))
+        .filter(
+          (tx) =>
+            !tx.manualCategory && // não exclui o que foi curado à mão
+            ruleMatches(rule, tx.description, tx.amount)
+        )
         .map((tx) => tx.id);
 
       if (ids.length === 0) {
@@ -249,7 +255,11 @@ export default function RulesPage() {
     try {
       const all = await transactionService.listLite({});
       const ids = all
-        .filter((tx) => applyUserRules(tx.description, tx.amount, rules).ignore)
+        .filter(
+          (tx) =>
+            !tx.manualCategory &&
+            applyUserRules(tx.description, tx.amount, rules).ignore
+        )
         .map((tx) => tx.id);
 
       if (ids.length === 0) {

@@ -216,6 +216,8 @@ export default function TransactionsPage() {
         amount: values.amount,
         type: values.type,
         categoryId: values.categoryId || null,
+        // Edição na mão: protege a categoria da aplicação de regras ao histórico.
+        manualCategory: true,
       };
       if (editing) {
         await transactionService.update(editing.id, payload);
@@ -250,7 +252,8 @@ export default function TransactionsPage() {
     const categoryId = bulkCategory === UNCATEGORIZED ? null : bulkCategory;
     setApplyingBulk(true);
     try {
-      await transactionService.setCategoryMany(ids, categoryId);
+      // Edição em massa feita à mão → marca como manual (regras não sobrescrevem).
+      await transactionService.setCategoryMany(ids, categoryId, true);
       toast.success(`Categoria alterada em ${ids.length} lançamento(s).`);
       setSelectedIds(new Set());
       setBulkCategory('');
@@ -266,7 +269,10 @@ export default function TransactionsPage() {
     // Alvos: lançamentos sem categoria (ignora cancelados e pagamentos de
     // fatura, que já têm a categoria do cartão).
     const targets = transactions.filter(
-      (tx) => !tx.categoryId && tx.category?.kind !== 'credit_card'
+      (tx) =>
+        !tx.categoryId &&
+        !tx.manualCategory &&
+        tx.category?.kind !== 'credit_card'
     );
 
     // Agrupa por categoria: regra do usuário tem prioridade; senão a heurística

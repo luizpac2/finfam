@@ -22,6 +22,19 @@ const TABLE = 'transactions';
 const SELECT_WITH_CATEGORY =
   '*, categories!category_id ( id, name, icon, color, kind, parent_id, created_at, updated_at )';
 
+/**
+ * Detecta o erro do PostgREST quando a coluna `manual_category` ainda não
+ * existe (migração 0013 não aplicada). Permite tratar a escrita/leitura de
+ * forma tolerante e não perder edições durante o intervalo do deploy.
+ */
+const isMissingManualColumn = (
+  error: { message?: string; details?: string; hint?: string } | null
+): boolean =>
+  !!error &&
+  /manual_category/i.test(
+    `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`
+  );
+
 export interface TransactionFilters {
   type?: TransactionType;
   status?: TransactionStatus;
@@ -44,6 +57,8 @@ export interface TransactionLite {
   amount: number;
   type: TransactionType;
   categoryId: string | null;
+  /** true quando a categoria foi definida manualmente (regras não sobrescrevem). */
+  manualCategory: boolean;
 }
 
 /** Converte um termo numérico ("12,50", "12.50", "1234") em número, ou null. */
@@ -111,17 +126,24 @@ export const transactionService = {
    * Reduz payload e custo do PostgREST vs. `list` com embed.
    */
   async listLite(filters: TransactionFilters = {}): Promise<TransactionLite[]> {
-    let query = supabase
-      .from(TABLE)
-      .select('id, date, description, amount, type, category_id')
-      .order('date', { ascending: false });
+    const BASE = 'id, date, description, amount, type, category_id';
+    const build = (select: string) => {
+      let query = supabase
+        .from(TABLE)
+        .select(select)
+        .order('date', { ascending: false });
+      if (filters.type) query = query.eq('type', filters.type);
+      if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+      if (filters.from) query = query.gte('date', filters.from);
+      if (filters.to) query = query.lte('date', filters.to);
+      return query;
+    };
 
-    if (filters.type) query = query.eq('type', filters.type);
-    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
-    if (filters.from) query = query.gte('date', filters.from);
-    if (filters.to) query = query.lte('date', filters.to);
+    // Tenta trazer a flag manual; se a migração 0013 ainda não rodou, refaz sem.
+    let res = await build(`${BASE}, manual_category`);
+    if (res.error && isMissingManualColumn(res.error)) res = await build(BASE);
 
-    const rows = unwrap(await query, 'listar as transações');
+    const rows = unwrap(res, 'listar as transações');
     return (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
       id: r.id as string,
       date: r.date as string,
@@ -129,6 +151,7 @@ export const transactionService = {
       amount: Number(r.amount),
       type: r.type as TransactionType,
       categoryId: (r.category_id as string | null) ?? null,
+      manualCategory: Boolean(r.manual_category),
     }));
   },
 
@@ -263,23 +286,28 @@ export const transactionService = {
 
   /** Cria uma transação. O `userId` deve ser o id do perfil autenticado. */
   async create(input: TransactionInput): Promise<Transaction> {
-    const row = unwrap(
-      await supabase
-        .from(TABLE)
-        .insert({
-          description: input.description,
-          amount: Math.abs(Number(input.amount)),
-          type: input.type,
-          user_id: input.userId,
-          date: input.date,
-          status: input.status,
-          category_id: input.categoryId ?? null,
-          card_id: input.cardId ?? null,
-        })
-        .select(SELECT_WITH_CATEGORY)
-        .single(),
-      'criar a transação'
-    );
+    const base = {
+      description: input.description,
+      amount: Math.abs(Number(input.amount)),
+      type: input.type,
+      user_id: input.userId,
+      date: input.date,
+      status: input.status,
+      category_id: input.categoryId ?? null,
+      card_id: input.cardId ?? null,
+    };
+    const withManual =
+      input.manualCategory !== undefined
+        ? { ...base, manual_category: input.manualCategory }
+        : base;
+    const runInsert = (payload: typeof base | typeof withManual) =>
+      supabase.from(TABLE).insert(payload).select(SELECT_WITH_CATEGORY).single();
+
+    let res = await runInsert(withManual);
+    if (res.error && withManual !== base && isMissingManualColumn(res.error))
+      res = await runInsert(base);
+
+    const row = unwrap(res, 'criar a transação');
     return mapToTransaction(row as unknown as TransactionRowWithCategory);
   },
 
@@ -288,15 +316,27 @@ export const transactionService = {
     id: string,
     input: Partial<TransactionInput>
   ): Promise<Transaction> {
-    const row = unwrap(
-      await supabase
+    const rowInput = mapToTransactionRow(input);
+    const runUpdate = (payload: typeof rowInput) =>
+      supabase
         .from(TABLE)
-        .update(mapToTransactionRow(input))
+        .update(payload)
         .eq('id', id)
         .select(SELECT_WITH_CATEGORY)
-        .single(),
-      'atualizar a transação'
-    );
+        .single();
+
+    let res = await runUpdate(rowInput);
+    if (
+      res.error &&
+      'manual_category' in rowInput &&
+      isMissingManualColumn(res.error)
+    ) {
+      const fallback = { ...rowInput };
+      delete fallback.manual_category;
+      res = await runUpdate(fallback);
+    }
+
+    const row = unwrap(res, 'atualizar a transação');
     return mapToTransaction(row as unknown as TransactionRowWithCategory);
   },
 
@@ -334,21 +374,32 @@ export const transactionService = {
 
   /**
    * Atribui uma categoria (ou nenhuma, se `null`) a várias transações de uma
-   * vez. Usado na edição em massa da página de Transações.
+   * vez. Com `manual = true` (edição em massa feita à mão), marca também
+   * `manual_category` para proteger a escolha da aplicação de regras ao
+   * histórico. Com `manual = false` (regras/automático), NÃO mexe na flag.
    */
-  async setCategoryMany(ids: string[], categoryId: string | null): Promise<void> {
+  async setCategoryMany(
+    ids: string[],
+    categoryId: string | null,
+    manual = false
+  ): Promise<void> {
     // Atualiza em lotes para não estourar limites de URL/tamanho da query.
     const CHUNK = 200;
     for (let i = 0; i < ids.length; i += CHUNK) {
       const part = ids.slice(i, i + CHUNK);
       if (part.length === 0) continue;
-      unwrap(
-        await supabase
-          .from(TABLE)
-          .update({ category_id: categoryId })
-          .in('id', part),
-        'atualizar as categorias'
+      const run = (payload: { category_id: string | null; manual_category?: boolean }) =>
+        supabase.from(TABLE).update(payload).in('id', part);
+
+      let res = await run(
+        manual
+          ? { category_id: categoryId, manual_category: true }
+          : { category_id: categoryId }
       );
+      if (res.error && manual && isMissingManualColumn(res.error))
+        res = await run({ category_id: categoryId });
+
+      unwrap(res, 'atualizar as categorias');
     }
   },
 

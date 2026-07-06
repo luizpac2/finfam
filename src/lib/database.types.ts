@@ -132,6 +132,7 @@ export interface Database {
           category_id: string | null;
           card_id: string | null;
           user_id: string;
+          manual_category: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -145,6 +146,7 @@ export interface Database {
           category_id?: string | null;
           card_id?: string | null;
           user_id: string;
+          manual_category?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -158,6 +160,7 @@ export interface Database {
           category_id?: string | null;
           card_id?: string | null;
           user_id?: string;
+          manual_category?: boolean;
           created_at?: string;
           updated_at?: string;
         };

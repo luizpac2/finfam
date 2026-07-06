@@ -67,7 +67,8 @@ Tabelas em `public`:
   `parent_id` (subcategorias, self-FK). Cada cartão de crédito é uma categoria `credit_card`.
 - **transactions** — `id`, `date`, `description`, `amount` (sempre ≥0; sinal vem de `type`),
   `type` (`income`|`expense`), `status` (`pending`|`paid`|`cancelled`), `category_id`,
-  `card_id` (→categoria do cartão, na importação de fatura), `user_id` (→users.id, o autor).
+  `card_id` (→categoria do cartão, na importação de fatura), `user_id` (→users.id, o autor),
+  `manual_category` (bool; `true` = categoria definida à mão → regras/auto NÃO sobrescrevem).
   ⚠️ Tem **2 FKs para categories** (`category_id` e `card_id`): no embed do PostgREST use
   `categories!category_id ( ... )` senão dá erro de ambiguidade.
 - **category_rules** — regras do usuário: `keyword` (opcional), `amount` (opcional, numeric),
@@ -115,13 +116,19 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   de cada parcela (compra + (n-1) meses) e projetam as parcelas futuras.
 - **Categorização automática:** regras do usuário (`ruleEngine`) têm prioridade sobre a
   heurística (`categorizationEngine`). Categorias são específicas por tipo (receita/despesa).
+- **Edição manual protegida:** editar a categoria à mão (editor ou edição em massa em
+  Transações) marca `manual_category=true`. A aplicação de regras ao histórico (Regras) e a
+  categorização automática **ignoram** esses lançamentos — não sobrescrevem o que foi curado.
+  O `transactionService` é tolerante à coluna ausente (migração 0013 não aplicada): tenta com
+  a flag e refaz sem ela, então um push antes da migration não perde edições.
 
 ## Migrations (rodar em ordem no SQL Editor do Supabase)
 
 `0001` schema · `0002` funções auth/RLS · `0003` RLS · `0004`/`0005` seed categorias ·
 `0006` kind+subcategorias · `0007` cartão de crédito · `0008` regras · `0009`
 meses-com-lançamentos (RPC) · `0010` regras por valor · `0011` índice trigram de busca +
-hardening · `0012` RPC `financial_summary` (resumo agregado no banco).
+hardening · `0012` RPC `financial_summary` (resumo agregado no banco) · `0013`
+`manual_category` (protege edição manual da aplicação de regras).
 `supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)
