@@ -60,6 +60,7 @@ export default function CardsPage() {
     useReferenceData();
 
   const [cardMonths, setCardMonths] = useState<Set<string>>(new Set());
+  const [allMonths, setAllMonths] = useState<Set<string>>(new Set());
   const [loadingCoverage, setLoadingCoverage] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -69,9 +70,14 @@ export default function CardsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    transactionService
-      .cardMonths()
-      .then(setCardMonths)
+    Promise.all([
+      transactionService.cardMonths(),
+      transactionService.monthsWithData(),
+    ])
+      .then(([cm, mm]) => {
+        setCardMonths(cm);
+        setAllMonths(mm);
+      })
       .finally(() => setLoadingCoverage(false));
   }, []);
 
@@ -83,36 +89,37 @@ export default function CardsPage() {
     [categories]
   );
 
-  // Primeiro mês com dados de cada cartão (início do período "esperado").
-  const cardFirstMonth = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const key of cardMonths) {
-      const [cardId, ym] = key.split('|');
-      const cur = map.get(cardId);
-      if (!cur || ym < cur) map.set(cardId, ym);
-    }
-    return map;
-  }, [cardMonths]);
+  const now = currentYm();
 
-  // Colunas de mês (do 1º mês com dados de cartão até o mês atual; teto MAX_MONTHS).
+  // Mês mais antigo com QUALQUER dado — referência quando o cartão não declara
+  // "vigente desde".
+  const globalEarliest = useMemo(() => {
+    const fromCards = [...cardMonths].map((k) => k.split('|')[1]);
+    return [...allMonths, ...fromCards].sort()[0];
+  }, [allMonths, cardMonths]);
+
+  // Início do período em que se espera fatura do cartão.
+  const openedMonth = (card: Category): string =>
+    card.openedAt ? card.openedAt.slice(0, 7) : (globalEarliest ?? now);
+
+  // Colunas de mês: do "vigente desde" mais antigo até o mês atual (teto MAX_MONTHS).
   const months = useMemo(() => {
-    const now = currentYm();
-    const firsts = [...cardFirstMonth.values()].sort();
-    let start = firsts[0] ?? now;
+    const starts = cards.map((c) =>
+      c.openedAt ? c.openedAt.slice(0, 7) : (globalEarliest ?? now)
+    );
+    let start = starts.sort()[0] ?? now;
+    if (start > now) start = now;
     const all = monthsBetween(start, now);
     if (all.length > MAX_MONTHS) start = all[all.length - MAX_MONTHS];
     return monthsBetween(start, now);
-  }, [cardFirstMonth]);
-
-  const now = currentYm();
+  }, [cards, globalEarliest, now]);
 
   const coverage = (card: Category, ym: string): Coverage => {
     if (cardMonths.has(`${card.id}|${ym}`)) return 'uploaded';
     const closedYm = card.closedAt ? card.closedAt.slice(0, 7) : null;
     if (closedYm && ym > closedYm) return 'na'; // após o cancelamento
-    const first = cardFirstMonth.get(card.id);
-    if (!first || ym < first) return 'na'; // sem histórico / antes do 1º uso
-    return 'missing';
+    if (ym < openedMonth(card)) return 'na'; // antes de "vigente desde"
+    return 'missing'; // vigente e sem fatura naquele mês
   };
 
   // Status do mês atual (só cartões vigentes).
@@ -146,12 +153,12 @@ export default function CardsPage() {
 
   const patchCard = async (
     card: Category,
-    closedAt: string | null,
+    patch: { openedAt?: string | null; closedAt?: string | null },
     message: string
   ) => {
     setBusyId(card.id);
     try {
-      await categoryService.update(card.id, { closedAt });
+      await categoryService.update(card.id, patch);
       await refreshCategories();
       toast.success(message);
     } catch (err) {
@@ -307,6 +314,23 @@ export default function CardsPage() {
 
                     {isAdmin && (
                       <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1 text-xs text-brand-gray">
+                          <span className="hidden sm:inline">Desde</span>
+                          <input
+                            type="date"
+                            value={card.openedAt ?? `${openedMonth(card)}-01`}
+                            disabled={busy}
+                            onChange={(e) =>
+                              patchCard(
+                                card,
+                                { openedAt: e.target.value || null },
+                                'Vigente desde atualizado.'
+                              )
+                            }
+                            className="rounded-lg border border-brand-moss/25 bg-white px-2 py-1 text-sm text-brand-moss outline-none focus:border-brand-aqua"
+                            aria-label="Vigente desde"
+                          />
+                        </label>
                         {card.closedAt ? (
                           <>
                             <input
@@ -316,7 +340,7 @@ export default function CardsPage() {
                               onChange={(e) =>
                                 patchCard(
                                   card,
-                                  e.target.value || todayIso(),
+                                  { closedAt: e.target.value || todayIso() },
                                   'Data atualizada.'
                                 )
                               }
@@ -327,7 +351,11 @@ export default function CardsPage() {
                               type="button"
                               disabled={busy}
                               onClick={() =>
-                                patchCard(card, null, 'Cartão reativado.')
+                                patchCard(
+                                  card,
+                                  { closedAt: null },
+                                  'Cartão reativado.'
+                                )
                               }
                               className="inline-flex items-center gap-1 rounded-lg border border-brand-moss/25 px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:opacity-60"
                             >
@@ -342,7 +370,7 @@ export default function CardsPage() {
                             onClick={() =>
                               patchCard(
                                 card,
-                                todayIso(),
+                                { closedAt: todayIso() },
                                 `"${card.name}" marcado como cancelado.`
                               )
                             }

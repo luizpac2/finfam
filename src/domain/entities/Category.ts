@@ -11,6 +11,8 @@ export interface Category {
   color: string | null;
   kind: CategoryKind;
   parentId: string | null;
+  /** Cartões (`credit_card`): "vigente desde"; null = usa o 1º mês com dados. */
+  openedAt: string | null;
   /** Cartões (`credit_card`): data de cancelamento; null = vigente. */
   closedAt: string | null;
   createdAt: string;
@@ -22,6 +24,7 @@ export interface CategoryInput {
   color?: string | null;
   kind?: CategoryKind;
   parentId?: string | null;
+  openedAt?: string | null;
   closedAt?: string | null;
 }
 
@@ -33,6 +36,7 @@ export const mapToCategory = (row: CategoryRow): Category => ({
   color: row.color,
   kind: row.kind,
   parentId: row.parent_id,
+  openedAt: row.opened_at,
   closedAt: row.closed_at,
   createdAt: row.created_at,
 });
@@ -47,6 +51,7 @@ export const mapToCategoryRow = (
   if (input.color !== undefined) row.color = input.color;
   if (input.kind !== undefined) row.kind = input.kind;
   if (input.parentId !== undefined) row.parent_id = input.parentId;
+  if (input.openedAt !== undefined) row.opened_at = input.openedAt;
   if (input.closedAt !== undefined) row.closed_at = input.closedAt;
   return row;
 };

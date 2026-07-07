@@ -64,8 +64,8 @@ Tabelas em `public`:
 - **users** — perfis + whitelist. `id`, `auth_id`(→auth.users, null até login), `email`(único, ci),
   `full_name`, `role` (`admin`|`member`), `status` (`invited`|`active`|`revoked`), `avatar_url`.
 - **categories** — `id`, `name`, `icon`, `color`, `kind` (`income`|`expense`|`credit_card`),
-  `parent_id` (subcategorias, self-FK), `closed_at` (cartão cancelado; null = vigente).
-  Cada cartão de crédito é uma categoria `credit_card`.
+  `parent_id` (subcategorias, self-FK), `opened_at`/`closed_at` (cartão: vigente desde /
+  cancelado em; ambos null = vigente sem data). Cada cartão de crédito é uma categoria `credit_card`.
 - **transactions** — `id`, `date`, `description`, `amount` (sempre ≥0; sinal vem de `type`),
   `type` (`income`|`expense`), `status` (`pending`|`paid`|`cancelled`), `category_id`,
   `card_id` (→categoria do cartão, na importação de fatura), `user_id` (→users.id, o autor),
@@ -133,7 +133,8 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
 meses-com-lançamentos (RPC) · `0010` regras por valor · `0011` índice trigram de busca +
 hardening · `0012` RPC `financial_summary` (resumo agregado no banco) · `0013`
 `manual_category` (protege edição manual da aplicação de regras) · `0014`
-`categories.closed_at` (cartão vigente/cancelado) + RPC `card_months` (cobertura de faturas).
+`categories.closed_at` (cartão vigente/cancelado) + RPC `card_months` (cobertura de faturas) ·
+`0015` `categories.opened_at` (cartão "vigente desde", para marcar faturas faltantes).
 `supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)

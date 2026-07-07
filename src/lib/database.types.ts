@@ -24,6 +24,7 @@ export interface Database {
           color: string | null;
           kind: CategoryKind;
           parent_id: string | null;
+          opened_at: string | null;
           closed_at: string | null;
           created_at: string;
           updated_at: string;
@@ -35,6 +36,7 @@ export interface Database {
           color?: string | null;
           kind?: CategoryKind;
           parent_id?: string | null;
+          opened_at?: string | null;
           closed_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -46,6 +48,7 @@ export interface Database {
           color?: string | null;
           kind?: CategoryKind;
           parent_id?: string | null;
+          opened_at?: string | null;
           closed_at?: string | null;
           created_at?: string;
           updated_at?: string;
