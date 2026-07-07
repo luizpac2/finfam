@@ -36,18 +36,24 @@ const make = (current: number, total: number): Installment => ({
 
 // "PARCELA 3/10", "PARC 03 DE 12", "PARC. 3/12" (texto já normalizado/maiúsculo).
 const KEYED = /PARC(?:ELA)?\.?\s*(\d{1,2})\s*(?:\/|DE)\s*(\d{1,2})/;
-// "3/10", "(03/12)" isolado — exige limite antes e NÃO ser parte de uma data
-// completa (dd/mm/aaaa): o `(?![\d/])` barra "01/12/2024".
-const BARE = /(?:^|[\s(])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/;
+// "3/10", "(03/12)" isolado — grupos: prefixo | atual | total. Global para
+// varrer candidatos (pode haver uma DATA antes da parcela). O `(?![\d/])` barra
+// datas completas dd/mm/aaaa ("01/12/2024").
+const BARE_SCAN = /(^|[\s(])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/g;
+// Uma hora logo após o "N/M" ("01/02 09:12") indica DATA, não parcela.
+const TIME_AFTER = /^\s*\d{1,2}[:h]\d{2}/i;
 
 /**
- * Extrai a parcela de uma descrição de lançamento, ou `null` quando não parece
- * parcelado. Prioriza a forma com a palavra "parcela" (mais confiável).
+ * Extrai a parcela de uma descrição, ou `null` quando não parece parcelado.
+ * Prioriza a forma com a palavra "parcela". Na forma isolada "N/M", ignora o
+ * que na verdade é uma DATA dd/mm — caso comum em extratos bancários, ex.:
+ * "01/02 09:12 FULANO" (Pix) NÃO é parcela 1/2.
  */
 export const parseInstallment = (description: string): Installment | null => {
   const text = normalizeText(description);
   if (!text) return null;
 
+  // 1) Forma explícita "PARCELA/PARC N/M" — confiável, vence.
   const keyed = text.match(KEYED);
   if (keyed) {
     const c = Number(keyed[1]);
@@ -55,11 +61,23 @@ export const parseInstallment = (description: string): Installment | null => {
     if (isValid(c, t)) return make(c, t);
   }
 
-  const bare = text.match(BARE);
-  if (bare) {
-    const c = Number(bare[1]);
-    const t = Number(bare[2]);
-    if (isValid(c, t)) return make(c, t);
+  // 2) Forma isolada "N/M" — varre candidatos e descarta datas.
+  BARE_SCAN.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = BARE_SCAN.exec(text)) !== null) {
+    const c = Number(m[2]);
+    const t = Number(m[3]);
+    if (!isValid(c, t)) continue;
+
+    const numStart = m.index + m[1].length; // posição do 1º dígito
+    const atStart = numStart === 0; // "01/02 …" no começo da descrição
+    const followedByTime = TIME_AFTER.test(text.slice(BARE_SCAN.lastIndex));
+    const looksLikeDate = c >= 1 && c <= 31 && t >= 1 && t <= 12;
+
+    // Data dd/mm (no começo, ou seguida de hora) → não é parcela.
+    if (looksLikeDate && (atStart || followedByTime)) continue;
+
+    return make(c, t);
   }
 
   return null;
