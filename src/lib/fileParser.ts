@@ -379,9 +379,12 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
 // Texto genérico (usado por PDF e TXT sem estrutura)
 // =============================================================================
 
-// Linha de lançamento: Dia … Valor (+)/(-).  Grupos: data | meio | valor | sinal | resto
-const TX_LINE =
-  /^(\d{2}\/\d{2}\/\d{4})\s+(.*?)(\d{1,3}(?:\.\d{3})*,\d{2})\s*\(([+-])\)(.*)$/;
+// Uma nova transação começa numa linha que INICIA com a data dd/mm/aaaa.
+const DATE_START = /^(\d{2}\/\d{2}\/\d{4})\b/;
+// Valor com sinal (+)/(-), procurado em QUALQUER lugar do bloco da transação —
+// no BB o valor às vezes fica na 1ª linha (com a data) e às vezes numa linha
+// seguinte (alinhado ao histórico, que quebra em 2 linhas).
+const VALUE_SIGNED = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*\(([+-])\)/;
 
 // Cabeçalhos/rodapés/saldos que não fazem parte do histórico.
 const NOISE_LINE =
@@ -401,22 +404,17 @@ const stripLeadingCodes = (value: string): string => {
   return tokens.slice(i).join(' ');
 };
 
-interface Pending {
-  date: string;
-  amount: number;
-  type: TransactionType;
-  parts: string[];
-}
-
 /**
  * Converte texto bruto de extrato em lançamentos padronizados.
  *
- * Formato do Banco do Brasil (colunas Dia | Lote | Documento | Histórico |
- * Valor): a linha do lançamento traz `Dia … Valor (+)/(-)`, e o **Histórico
- * ocupa as linhas seguintes**. Portanto:
- *  - o SINAL `(+)` → receita e `(-)` → despesa;
- *  - a DESCRIÇÃO acumula o texto até o próximo lançamento, ignorando as
- *    colunas numéricas (Lote/Documento), saldos e ruídos.
+ * Formato do Banco do Brasil (Dia | Lote | Documento | Histórico | Valor). Cada
+ * transação é um BLOCO que vai da linha com a data até a próxima data (ou um
+ * saldo). O valor `(+)/(-)` é procurado em QUALQUER linha do bloco — porque o BB
+ * às vezes o coloca junto da data e às vezes numa linha seguinte, alinhado ao
+ * histórico que quebra em duas linhas. Assim, TODAS as linhas do histórico ficam
+ * no lançamento certo (a última não "vaza" para o de baixo). Do bloco removemos
+ * a data, o valor e os códigos iniciais (Lote/Documento). `(+)` → receita,
+ * `(-)` → despesa.
  */
 export const parseStatementText = (text: string): ParsedTransaction[] => {
   const lines = text
@@ -425,47 +423,50 @@ export const parseStatementText = (text: string): ParsedTransaction[] => {
     .filter(Boolean);
 
   const transactions: ParsedTransaction[] = [];
-  let current: Pending | null = null;
+  let block: string[] = [];
+  let blockDate = '';
 
   const flush = () => {
-    if (current && current.amount > 0) {
-      const description = current.parts.join(' ').replace(/\s+/g, ' ').trim();
-      transactions.push({
-        date: current.date,
-        description: description || 'Lançamento',
-        amount: current.amount,
-        type: current.type,
-      });
+    if (blockDate && block.length > 0) {
+      const joined = block.join(' ');
+      const value = joined.match(VALUE_SIGNED);
+      const amount = value ? parseAmount(value[1]) : NaN;
+      const date = parseFlexibleDate(blockDate);
+      if (value && date && !Number.isNaN(amount) && Math.abs(amount) > 0) {
+        const historico = stripLeadingCodes(
+          joined
+            .replace(blockDate, ' ') // tira a data
+            .replace(value[0], ' ') // tira o "valor (+/-)"
+            .replace(/\s+/g, ' ')
+            .trim()
+        );
+        transactions.push({
+          date,
+          description: historico || 'Lançamento',
+          amount: Math.abs(amount),
+          type: value[2] === '-' ? 'expense' : 'income',
+        });
+      }
     }
-    current = null;
+    block = [];
+    blockDate = '';
   };
 
   for (const line of lines) {
-    const match = line.match(TX_LINE);
-    if (match) {
+    const dateMatch = line.match(DATE_START);
+    if (dateMatch) {
       flush();
-      const [, dmy, middle, rawValue, sign, trailing] = match;
-      const date = parseFlexibleDate(dmy);
-      const amount = parseAmount(rawValue);
-      current =
-        date && !Number.isNaN(amount)
-          ? {
-              date,
-              amount: Math.abs(amount),
-              type: sign === '-' ? 'expense' : 'income',
-              parts: [stripLeadingCodes(middle), trailing.trim()].filter(Boolean),
-            }
-          : null;
+      blockDate = dateMatch[1];
+      block = [line];
       continue;
     }
-
-    if (!current) continue;
+    if (!blockDate) continue; // ainda não começou um lançamento
     if (isNoiseLine(line)) {
-      // "Saldo do dia" e afins encerram o histórico do lançamento atual.
+      // "Saldo do dia"/"S A L D O" encerram o bloco corrente.
       if (/^(saldo|s a l d o)/i.test(line)) flush();
       continue;
     }
-    current.parts.push(line);
+    block.push(line);
   }
   flush();
 

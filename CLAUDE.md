@@ -104,7 +104,9 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   **NÃO** conta em despesas/saldo (as compras da fatura já entram como despesas).
 - **Importação:** OFX/OFC/CSV/TXT/PDF. Exclui automaticamente "BB Rende Fácil"/"Resgate
   Poupança" (aplicações automáticas) em TODOS os formatos. PDF do BB: valor com sinal `(+)/(-)`,
-  histórico multilinha (ver `fileParser.parseStatementText`). Detecta duplicatas.
+  histórico multilinha. `parseStatementText` é **por bloco** (da data até a próxima data); o
+  valor é buscado em QUALQUER linha do bloco — no BB ele às vezes fica alinhado à 2ª linha do
+  histórico, então a última linha não pode "vazar" para o lançamento de baixo. Detecta duplicatas.
 - **Extrato de cartão (modo cartão no `Import`):** a convenção de sinal varia por emissor
   (Nubank CSV: compra **positiva**; OFX de cartão: compra **negativa**). Por isso o `Import`
   descobre o "sinal de compra" pela **maioria** das linhas → compras viram despesa ligada ao
