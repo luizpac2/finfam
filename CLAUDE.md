@@ -51,7 +51,7 @@ src/
 ├── hooks/                  # useAuth, useToast, useTheme
 ├── routes/                 # AppRoutes (lazy) + ProtectedRoute (requireAdmin)
 ├── components/             # layout/ (MainLayout, Sidebar sanfonável, GlobalSearch), ui/, dashboard/, filters/, import/, transactions/
-└── pages/                  # Dashboard, AnalyticsDashboard, TransactionsPage, InstallmentsPage (/parcelamentos), Import, CategoriesPage, RulesPage, AdminDashboard, Login, NeedInvite, NotFound
+└── pages/                  # Dashboard, AnalyticsDashboard, TransactionsPage, InstallmentsPage (/parcelamentos), CardsPage (/cartoes — controle de faturas), Import, CategoriesPage, RulesPage, AdminDashboard, Login, NeedInvite, NotFound
 ```
 
 **Regra de ouro:** a UI nunca importa `@supabase/supabase-js`; só a camada
@@ -64,7 +64,8 @@ Tabelas em `public`:
 - **users** — perfis + whitelist. `id`, `auth_id`(→auth.users, null até login), `email`(único, ci),
   `full_name`, `role` (`admin`|`member`), `status` (`invited`|`active`|`revoked`), `avatar_url`.
 - **categories** — `id`, `name`, `icon`, `color`, `kind` (`income`|`expense`|`credit_card`),
-  `parent_id` (subcategorias, self-FK). Cada cartão de crédito é uma categoria `credit_card`.
+  `parent_id` (subcategorias, self-FK), `closed_at` (cartão cancelado; null = vigente).
+  Cada cartão de crédito é uma categoria `credit_card`.
 - **transactions** — `id`, `date`, `description`, `amount` (sempre ≥0; sinal vem de `type`),
   `type` (`income`|`expense`), `status` (`pending`|`paid`|`cancelled`), `category_id`,
   `card_id` (→categoria do cartão, na importação de fatura), `user_id` (→users.id, o autor),
@@ -131,7 +132,8 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
 `0006` kind+subcategorias · `0007` cartão de crédito · `0008` regras · `0009`
 meses-com-lançamentos (RPC) · `0010` regras por valor · `0011` índice trigram de busca +
 hardening · `0012` RPC `financial_summary` (resumo agregado no banco) · `0013`
-`manual_category` (protege edição manual da aplicação de regras).
+`manual_category` (protege edição manual da aplicação de regras) · `0014`
+`categories.closed_at` (cartão vigente/cancelado) + RPC `card_months` (cobertura de faturas).
 `supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)

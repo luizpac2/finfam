@@ -285,6 +285,21 @@ export const transactionService = {
     return new Set((data ?? []) as string[]);
   },
 
+  /**
+   * Cobertura de faturas por cartão: conjunto de chaves "cardId|YYYY-MM" que
+   * possuem ao menos um lançamento. Usado no controle "cartão × mês".
+   */
+  async cardMonths(): Promise<Set<string>> {
+    const { data, error } = await supabase.rpc('card_months');
+    if (error) {
+      console.error('[service] Falha ao carregar meses por cartão:', error);
+      return new Set();
+    }
+    return new Set(
+      (data ?? []).map((r) => `${r.card_id}|${r.ym}`)
+    );
+  },
+
   /** Busca uma transação por id (com categoria). */
   async getById(id: string): Promise<Transaction> {
     const row = unwrap(

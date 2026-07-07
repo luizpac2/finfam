@@ -6,6 +6,7 @@ import {
   Upload,
   Receipt,
   Layers,
+  CreditCard,
   Tags,
   Filter,
   ShieldCheck,
@@ -51,6 +52,7 @@ export function MainLayout() {
     { label: 'Dashboard', to: '/dashboard', icon: BarChart3 },
     { label: 'Transações', to: '/transacoes', icon: Receipt },
     { label: 'Parcelamentos', to: '/parcelamentos', icon: Layers },
+    { label: 'Cartões', to: '/cartoes', icon: CreditCard },
     { label: 'Importar', to: '/importar', icon: Upload },
     ...(isAdmin
       ? [

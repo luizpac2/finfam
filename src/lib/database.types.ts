@@ -24,6 +24,7 @@ export interface Database {
           color: string | null;
           kind: CategoryKind;
           parent_id: string | null;
+          closed_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -34,6 +35,7 @@ export interface Database {
           color?: string | null;
           kind?: CategoryKind;
           parent_id?: string | null;
+          closed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -44,6 +46,7 @@ export interface Database {
           color?: string | null;
           kind?: CategoryKind;
           parent_id?: string | null;
+          closed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -184,6 +187,10 @@ export interface Database {
       financial_summary: {
         Args: { p_from?: string | null; p_to?: string | null };
         Returns: { income: number; expense: number }[];
+      };
+      card_months: {
+        Args: Record<string, never>;
+        Returns: { card_id: string; ym: string }[];
       };
     };
     Enums: {
