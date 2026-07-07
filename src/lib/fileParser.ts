@@ -314,7 +314,10 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
   const header = splitCsvLine(rows[headerIndex], delimiter).map(normalize);
   const col = (re: RegExp) => header.findIndex((h) => re.test(h));
   const dateCol = col(/DATA|DATE/);
-  const descCol = col(/DESCRI|HISTOR|LANCAMENTO|MEMO|DETALHE|TRANSA|OBSERV/);
+  // "Detalhes" (BB) tem prioridade como descrição; "Lançamento"/"Histórico"
+  // servem de reserva quando não há Detalhes ou ele está vazio na linha.
+  const detailsCol = col(/DETALHE/);
+  const descCol = col(/DESCRI|HISTOR|LANCAMENTO|MEMO|TRANSA|OBSERV/);
   const amountCol = col(/VALOR|AMOUNT|MONTANTE|VALUE|VLR/);
   const creditCol = col(/CREDITO|CREDIT|ENTRADA/);
   const debitCol = col(/DEBITO|DEBIT|SAIDA/);
@@ -353,7 +356,9 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
 
     if (Number.isNaN(amount) || amount === 0) continue;
 
-    const description = (descCol >= 0 ? cells[descCol] : '') || 'Lançamento';
+    const details = detailsCol >= 0 ? (cells[detailsCol] ?? '').trim() : '';
+    const fallback = descCol >= 0 ? (cells[descCol] ?? '').trim() : '';
+    const description = details || fallback || 'Lançamento';
     transactions.push({
       date,
       description: description.replace(/\s+/g, ' ').trim(),
