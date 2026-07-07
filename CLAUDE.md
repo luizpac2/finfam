@@ -116,6 +116,9 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   de cada parcela (compra + (n-1) meses) e projetam as parcelas futuras.
 - **Categorização automática:** regras do usuário (`ruleEngine`) têm prioridade sobre a
   heurística (`categorizationEngine`). Categorias são específicas por tipo (receita/despesa).
+  A regra **só categoriza quando a categoria é do mesmo tipo do lançamento**
+  (`categoryKindMatchesType`): categoria de receita não é aplicada a despesa e vice-versa
+  (ex.: mesma descrição para salário recebido × compra feita no mesmo lugar).
 - **Edição manual protegida:** editar a categoria à mão (editor ou edição em massa em
   Transações) marca `manual_category=true`. A aplicação de regras ao histórico (Regras) e a
   categorização automática **ignoram** esses lançamentos — não sobrescrevem o que foi curado.

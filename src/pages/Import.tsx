@@ -12,7 +12,7 @@ import {
   suggestCategoryId,
 } from '../domain/categorizationEngine';
 import { parseInstallment } from '../domain/installments';
-import { applyUserRules } from '../domain/ruleEngine';
+import { applyUserRules, categoryKindMap } from '../domain/ruleEngine';
 import type { TransactionType } from '../lib/database.types';
 import {
   detectDuplicates,
@@ -93,9 +93,22 @@ export default function Import() {
 
       // Pré-categoriza cada linha; duplicatas/ignoradas entram desmarcadas.
       // Regras do usuário têm prioridade sobre a heurística.
+      const kindById = categoryKindMap(categories);
       const reviewed: ReviewRow[] = parsed.map((tx, index) => {
         const duplicate = duplicates.get(index);
-        const rule = applyUserRules(tx.description, tx.amount, rules);
+        // Tipo efetivo: no modo cartão a compra vira despesa.
+        const effectiveType = isCardStatement
+          ? tx.type === purchaseParsedType
+            ? 'expense'
+            : 'income'
+          : tx.type;
+        const rule = applyUserRules(
+          tx.description,
+          tx.amount,
+          effectiveType,
+          rules,
+          kindById
+        );
         const ignored = rule.ignore || undefined;
         const installment = parseInstallment(tx.description) ?? undefined;
 
@@ -184,10 +197,17 @@ export default function Import() {
   // Reaplica regras + heurística nas linhas SEM categoria (preserva escolhas).
   const handleAutoCategorize = () => {
     let filled = 0;
+    const kindById = categoryKindMap(categories);
     setRows((current) =>
       current.map((row) => {
         if (row.categoryId) return row;
-        const rule = applyUserRules(row.description, row.amount, rules);
+        const rule = applyUserRules(
+          row.description,
+          row.amount,
+          row.type,
+          rules,
+          kindById
+        );
         const categoryId =
           rule.categoryId ??
           suggestCategoryId(row.description, row.type, categories);

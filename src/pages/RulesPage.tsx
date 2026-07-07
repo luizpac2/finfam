@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Ban,
   Eraser,
+  Info,
   Loader2,
   Plus,
   RefreshCw,
@@ -15,7 +16,12 @@ import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { categoryRuleService, transactionService } from '../services';
 import { normalizeText } from '../domain/categorizationEngine';
-import { applyUserRules, ruleMatches } from '../domain/ruleEngine';
+import {
+  applyUserRules,
+  categoryKindMap,
+  categoryKindMatchesType,
+  ruleMatches,
+} from '../domain/ruleEngine';
 import type { Category } from '../domain/entities/Category';
 import {
   ruleConditionLabel,
@@ -149,10 +155,12 @@ export default function RulesPage() {
     try {
       const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
+      const ruleKind = categoryById.get(rule.categoryId)?.kind;
       const ids = all
         .filter(
           (tx) =>
             !isCategoryLocked(tx, hasManual) && // preserva edições manuais
+            categoryKindMatchesType(ruleKind, tx.type) && // respeita receita/despesa
             tx.categoryId !== rule.categoryId &&
             ruleMatches(rule, tx.description, tx.amount)
         )
@@ -191,10 +199,17 @@ export default function RulesPage() {
     try {
       const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
+      const kindById = categoryKindMap(categories);
       const groups = new Map<string, string[]>();
       for (const tx of all) {
         if (isCategoryLocked(tx, hasManual)) continue; // preserva edições manuais
-        const { categoryId } = applyUserRules(tx.description, tx.amount, rules);
+        const { categoryId } = applyUserRules(
+          tx.description,
+          tx.amount,
+          tx.type,
+          rules,
+          kindById
+        );
         if (!categoryId || tx.categoryId === categoryId) continue;
         const list = groups.get(categoryId) ?? [];
         list.push(tx.id);
@@ -272,11 +287,13 @@ export default function RulesPage() {
     try {
       const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
+      const kindById = categoryKindMap(categories);
       const ids = all
         .filter(
           (tx) =>
             !isCategoryLocked(tx, hasManual) &&
-            applyUserRules(tx.description, tx.amount, rules).ignore
+            applyUserRules(tx.description, tx.amount, tx.type, rules, kindById)
+              .ignore
         )
         .map((tx) => tx.id);
 
@@ -526,6 +543,53 @@ export default function RulesPage() {
           )}
         </RuleColumn>
       </div>
+
+      {/* Como as regras funcionam */}
+      <Card className="bg-brand-light/40">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-brand-moss">
+          <Info className="h-4 w-4 text-brand-aqua" strokeWidth={1.8} />
+          Como as regras funcionam
+        </h2>
+        <ul className="space-y-2 text-sm leading-relaxed text-brand-gray">
+          <li>
+            <strong className="text-brand-moss">Palavra e/ou valor.</strong> A
+            regra casa quando a palavra aparece na descrição <em>e</em> o valor
+            (se informado) é igual. Regras mais específicas — com valor, ou
+            palavra mais longa — têm prioridade.
+          </li>
+          <li>
+            <strong className="text-brand-moss">
+              Respeita o tipo (receita × despesa).
+            </strong>{' '}
+            Uma regra cuja categoria é de{' '}
+            <span className="font-medium text-brand-income">receita</span> só se
+            aplica a lançamentos de receita; categoria de{' '}
+            <span className="font-medium text-brand-expense">despesa</span> (ou
+            cartão), só a despesas. Ex.: se a escola paga o salário (receita) e
+            também há compras feitas nela (despesa) com a mesma descrição, cada
+            um é categorizado no lado certo — a despesa nunca vira a categoria de
+            receita.
+          </li>
+          <li>
+            <strong className="text-brand-moss">Categorizar × Ignorar.</strong>{' '}
+            “Categorizar” define a categoria; “Ignorar” descarta o lançamento na
+            importação (ou exclui do histórico). Se alguma regra de “Ignorar”
+            casa, ela tem prioridade.
+          </li>
+          <li>
+            <strong className="text-brand-moss">
+              Edição manual é protegida.
+            </strong>{' '}
+            Se você definiu a categoria de um lançamento à mão, aplicar regras ao
+            histórico não sobrescreve nem exclui esse lançamento.
+          </li>
+          <li>
+            <strong className="text-brand-moss">Aplicar ao histórico.</strong> O
+            botão de recarregar em cada regra (ou “Aplicar ao histórico” no topo)
+            reprocessa os lançamentos já salvos, seguindo todas as regras acima.
+          </li>
+        </ul>
+      </Card>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import { parseInstallment } from '../domain/installments';
-import { applyUserRules } from '../domain/ruleEngine';
+import { applyUserRules, categoryKindMap } from '../domain/ruleEngine';
 import {
   expandCategorySelection,
   type Category,
@@ -277,9 +277,16 @@ export default function TransactionsPage() {
 
     // Agrupa por categoria: regra do usuário tem prioridade; senão a heurística
     // estrita (só match real; ambíguos ficam de fora).
+    const kindById = categoryKindMap(categories);
     const groups = new Map<string, string[]>();
     for (const tx of targets) {
-      const rule = applyUserRules(tx.description, tx.amount, rules);
+      const rule = applyUserRules(
+        tx.description,
+        tx.amount,
+        tx.type,
+        rules,
+        kindById
+      );
       const catId =
         rule.categoryId ??
         suggestCategoryIdStrict(tx.description, tx.type, categories);
