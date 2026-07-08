@@ -55,6 +55,7 @@ export default function TransactionsPage() {
   // Seleção em massa.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkCard, setBulkCard] = useState('');
   const [applyingBulk, setApplyingBulk] = useState(false);
   const headerCbRef = useRef<HTMLInputElement>(null);
 
@@ -120,6 +121,11 @@ export default function TransactionsPage() {
     for (const c of categories) map.set(c.id, c);
     return map;
   }, [categories]);
+
+  const cards = useMemo(
+    () => categories.filter((c) => c.kind === 'credit_card'),
+    [categories]
+  );
 
   // Selecionar uma categoria-pai inclui as subcategorias.
   const effectiveCats = useMemo(
@@ -244,6 +250,24 @@ export default function TransactionsPage() {
       await loadTransactions(period);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao excluir.');
+    }
+  };
+
+  const applyBulkCard = async () => {
+    if (!bulkCard) return;
+    const ids = [...selectedIds];
+    const cardId = bulkCard === 'NONE' ? null : bulkCard;
+    setApplyingBulk(true);
+    try {
+      await transactionService.setCardMany(ids, cardId);
+      toast.success(`Cartão atualizado em ${ids.length} lançamento(s).`);
+      setSelectedIds(new Set());
+      setBulkCard('');
+      await loadTransactions(period);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao atualizar.');
+    } finally {
+      setApplyingBulk(false);
     }
   };
 
@@ -451,6 +475,32 @@ export default function TransactionsPage() {
                 >
                   {applyingBulk ? 'Aplicando…' : 'Aplicar'}
                 </button>
+                {cards.length > 0 && (
+                  <>
+                    <select
+                      value={bulkCard}
+                      onChange={(e) => setBulkCard(e.target.value)}
+                      aria-label="Vincular a um cartão"
+                      className="w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua sm:w-56"
+                    >
+                      <option value="">Vincular ao cartão…</option>
+                      {cards.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                      <option value="NONE">Sem cartão (outra forma)</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={applyBulkCard}
+                      disabled={!bulkCard || applyingBulk}
+                      className="rounded-lg border border-brand-moss/25 px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Vincular
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={bulkDelete}

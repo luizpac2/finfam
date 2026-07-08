@@ -446,6 +446,23 @@ export const transactionService = {
   },
 
   /**
+   * Vincula (ou desvincula, se `null`) várias transações a um cartão de
+   * crédito (`card_id`). Usado para atribuir um extrato de cartão importado
+   * sem o "modo cartão", para a página Cartões passar a identificá-lo.
+   */
+  async setCardMany(ids: string[], cardId: string | null): Promise<void> {
+    const CHUNK = 200;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK);
+      if (part.length === 0) continue;
+      unwrap(
+        await supabase.from(TABLE).update({ card_id: cardId }).in('id', part),
+        'atualizar o cartão'
+      );
+    }
+  },
+
+  /**
    * Resumo financeiro (receitas, despesas e saldo) no período, agregado no
    * BANCO (RPC `financial_summary`) — não baixa o histórico para o cliente.
    * Exclui pagamentos de fatura (categorias tipo `credit_card`).
