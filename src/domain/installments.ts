@@ -40,6 +40,9 @@ const KEYED = /PARC(?:ELA)?\.?\s*(\d{1,2})\s*(?:\/|DE)\s*(\d{1,2})/;
 // varrer candidatos (pode haver uma DATA antes da parcela). O `(?![\d/])` barra
 // datas completas dd/mm/aaaa ("01/12/2024").
 const BARE_SCAN = /(^|[\s(])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/g;
+// "N DE M" isolado, sem a palavra "parcela" (ex.: cartão XP: "2 de 2").
+// Texto já normalizado (maiúsculo, sem acento).
+const BARE_DE_SCAN = /(^|[\s(])(\d{1,2})\s+DE\s+(\d{1,2})(?!\d)/g;
 // Uma hora logo após o "N/M" ("01/02 09:12") indica DATA, não parcela.
 const TIME_AFTER = /^\s*\d{1,2}[:h]\d{2}/i;
 
@@ -80,6 +83,15 @@ export const parseInstallment = (description: string): Installment | null => {
     return make(c, t);
   }
 
+  // 3) Forma isolada "N DE M" (ex.: cartão XP: "2 de 2").
+  BARE_DE_SCAN.lastIndex = 0;
+  let d: RegExpExecArray | null;
+  while ((d = BARE_DE_SCAN.exec(text)) !== null) {
+    const c = Number(d[2]);
+    const t = Number(d[3]);
+    if (isValid(c, t)) return make(c, t);
+  }
+
   return null;
 };
 
@@ -91,12 +103,14 @@ export const isInstallment = (description: string): boolean =>
 // parcela da descrição, preservando a caixa original para exibição.
 const KEYED_G = /parc(?:ela)?\.?\s*\d{1,2}\s*(?:\/|de)\s*\d{1,2}/gi;
 const BARE_G = /(?:^|[\s(])\d{1,2}\s*\/\s*\d{1,2}(?![\d/])/gi;
+const BARE_DE_G = /(?:^|[\s(])\d{1,2}\s+de\s+\d{1,2}(?!\d)/gi;
 
-/** Remove o "N/M" (e "parcela") da descrição, mantendo o resto legível. */
+/** Remove o "N/M" / "N de M" (e "parcela") da descrição, mantendo o resto. */
 export const stripInstallment = (description: string): string =>
   description
     .replace(KEYED_G, ' ')
     .replace(BARE_G, ' ')
+    .replace(BARE_DE_G, ' ')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s*[-–—]\s*$/, '')
     .trim();

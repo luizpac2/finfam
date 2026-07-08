@@ -317,7 +317,11 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
   // "Detalhes" (BB) tem prioridade como descrição; "Lançamento"/"Histórico"
   // servem de reserva quando não há Detalhes ou ele está vazio na linha.
   const detailsCol = col(/DETALHE/);
-  const descCol = col(/DESCRI|HISTOR|LANCAMENTO|MEMO|TRANSA|OBSERV/);
+  // Inclui "Estabelecimento"/"Local" (cartões: XP, etc.) como descrição.
+  const descCol = col(
+    /DESCRI|HISTOR|LANCAMENTO|MEMO|TRANSA|OBSERV|ESTABELEC|LOCAL|COMERC|MERCHANT/
+  );
+  const parcelaCol = col(/PARCELA|PARCEL/);
   const amountCol = col(/VALOR|AMOUNT|MONTANTE|VALUE|VLR/);
   const creditCol = col(/CREDITO|CREDIT|ENTRADA/);
   const debitCol = col(/DEBITO|DEBIT|SAIDA/);
@@ -358,7 +362,19 @@ export const parseCsv = (text: string): ParsedTransaction[] => {
 
     const details = detailsCol >= 0 ? (cells[detailsCol] ?? '').trim() : '';
     const fallback = descCol >= 0 ? (cells[descCol] ?? '').trim() : '';
-    const description = details || fallback || 'Lançamento';
+    let description = details || fallback || 'Lançamento';
+
+    // Coluna de parcela separada (ex.: cartão XP): anexa "N/M" à descrição para
+    // o detector de parcelamento reconhecer (só quando o total ≥ 2).
+    if (parcelaCol >= 0) {
+      const p = (cells[parcelaCol] ?? '').match(
+        /(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})/i
+      );
+      if (p && Number(p[2]) >= 2 && Number(p[1]) <= Number(p[2])) {
+        description = `${description} ${p[1]}/${p[2]}`;
+      }
+    }
+
     transactions.push({
       date,
       description: description.replace(/\s+/g, ' ').trim(),
