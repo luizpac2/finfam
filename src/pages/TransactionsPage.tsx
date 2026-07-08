@@ -216,6 +216,7 @@ export default function TransactionsPage() {
         amount: values.amount,
         type: values.type,
         categoryId: values.categoryId || null,
+        cardId: values.cardId || null,
         // Edição na mão: protege a categoria da aplicação de regras ao histórico.
         manualCategory: true,
       };
@@ -506,6 +507,10 @@ export default function TransactionsPage() {
                       const category = tx.categoryId
                         ? categoryById.get(tx.categoryId)
                         : undefined;
+                      const inst = parseInstallment(tx.description);
+                      const card = tx.cardId
+                        ? categoryById.get(tx.cardId)
+                        : undefined;
                       const signed =
                         tx.type === 'income' ? tx.amount : -tx.amount;
                       const selected = selectedIds.has(tx.id);
@@ -532,19 +537,40 @@ export default function TransactionsPage() {
                           </td>
                           <td className="max-w-[24rem] px-4 py-2.5 font-medium text-brand-moss">
                             <div className="flex items-center gap-1.5">
-                              {(() => {
-                                const inst = parseInstallment(tx.description);
-                                return inst ? (
-                                  <span
-                                    className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
-                                    title={`Parcela ${inst.label}`}
-                                  >
-                                    {inst.label}
-                                  </span>
-                                ) : null;
-                              })()}
+                              {inst && (
+                                <span
+                                  className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+                                  title={`Parcela ${inst.label}`}
+                                >
+                                  {inst.label}
+                                </span>
+                              )}
                               <span className="truncate">{tx.description}</span>
                             </div>
+                            {(card || inst) && (
+                              <div className="mt-0.5 flex items-center gap-1 text-xs text-brand-gray">
+                                {card ? (
+                                  <>
+                                    <span
+                                      className="flex h-3.5 w-3.5 items-center justify-center rounded"
+                                      style={{
+                                        backgroundColor: `${card.color ?? '#D8D8D8'}33`,
+                                      }}
+                                    >
+                                      <CategoryIcon
+                                        name={card.icon}
+                                        className="h-2.5 w-2.5"
+                                      />
+                                    </span>
+                                    <span className="truncate">{card.name}</span>
+                                  </>
+                                ) : (
+                                  <span className="italic">
+                                    Outra forma (transferência/boleto)
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-2.5">
                             {category ? (

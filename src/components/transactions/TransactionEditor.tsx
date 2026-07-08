@@ -13,6 +13,8 @@ export interface TransactionFormValues {
   type: TransactionType;
   amount: number;
   categoryId: string;
+  /** Cartão da compra (forma de pagamento); '' = outra forma (transferência…). */
+  cardId: string;
 }
 
 interface TransactionEditorProps {
@@ -40,6 +42,7 @@ export function TransactionEditor({
     type: (initial?.type ?? 'expense') as TransactionType,
     amount: initial ? String(initial.amount) : '',
     categoryId: initial?.categoryId ?? '',
+    cardId: initial?.cardId ?? '',
   }));
 
   // Cartões (categorias tipo credit_card) — para oferecer "Cartão" no seletor
@@ -50,6 +53,10 @@ export function TransactionEditor({
   );
   const firstCardId = useMemo(
     () => categories.find((c) => c.kind === 'credit_card')?.id ?? '',
+    [categories]
+  );
+  const cards = useMemo(
+    () => categories.filter((c) => c.kind === 'credit_card'),
     [categories]
   );
   const hasCards = cardIds.size > 0;
@@ -79,6 +86,8 @@ export function TransactionEditor({
       type: form.type,
       amount,
       categoryId: form.categoryId,
+      // Só despesas "normais" têm cartão da compra (não em receita/pagto fatura).
+      cardId: activeTipo === 'expense' ? form.cardId : '',
     });
   };
 
@@ -189,6 +198,29 @@ export function TransactionEditor({
             className="py-2"
           />
         </label>
+
+        {/* Forma de pagamento (cartão da compra) — só para despesas normais. */}
+        {activeTipo === 'expense' && hasCards && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-brand-moss">
+              Forma de pagamento
+            </span>
+            <select
+              value={form.cardId}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, cardId: e.target.value }))
+              }
+              className={inputClass}
+            >
+              <option value="">Outra (transferência, boleto…)</option>
+              {cards.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button
