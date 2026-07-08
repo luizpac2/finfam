@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
-import { parseStatementFile } from '../lib/fileParser';
+import { parseStatementFile, type ParsedTransaction } from '../lib/fileParser';
 import {
   isCardBillPayment,
   suggestCategoryId,
@@ -61,25 +61,6 @@ export default function Import() {
     try {
       const parsed = await parseStatementFile(file);
 
-      // Detecta duplicatas contra o que já está salvo nos meses do extrato
-      // (extrato repetido / lançamentos repetidos no mesmo mês).
-      let duplicates = new Map<number, DuplicateReason>();
-      if (parsed.length > 0) {
-        const dates = parsed.map((p) => p.date).sort();
-        const from = `${dates[0].slice(0, 7)}-01`;
-        const [ly, lm] = dates[dates.length - 1]
-          .slice(0, 7)
-          .split('-')
-          .map(Number);
-        const to = isoDate(new Date(ly, lm, 0)); // último dia do último mês
-        try {
-          const existing = await transactionService.list({ from, to });
-          duplicates = detectDuplicates(parsed, existing);
-        } catch {
-          /* se a checagem falhar, seguimos sem bloquear a importação */
-        }
-      }
-
       // Extrato de cartão: descobre qual SINAL representa as compras. A
       // convenção varia por emissor — em muitos CSV (ex.: Nubank) a compra vem
       // com valor POSITIVO; em OFX de cartão costuma ser NEGATIVO. Como as
@@ -91,17 +72,44 @@ export default function Import() {
           })()
         : null;
 
+      // Tipo EFETIVO da linha (no modo cartão, a compra vira despesa). Usado na
+      // detecção de duplicatas e na categorização.
+      const effectiveTypeOf = (tx: ParsedTransaction): TransactionType =>
+        isCardStatement
+          ? tx.type === purchaseParsedType
+            ? 'expense'
+            : 'income'
+          : tx.type;
+
+      // Detecta duplicatas contra o que já está salvo nos meses do extrato,
+      // usando o tipo EFETIVO (senão o sinal do cartão não casa com o salvo).
+      let duplicates = new Map<number, DuplicateReason>();
+      if (parsed.length > 0) {
+        const dates = parsed.map((p) => p.date).sort();
+        const from = `${dates[0].slice(0, 7)}-01`;
+        const [ly, lm] = dates[dates.length - 1]
+          .slice(0, 7)
+          .split('-')
+          .map(Number);
+        const to = isoDate(new Date(ly, lm, 0)); // último dia do último mês
+        try {
+          const existing = await transactionService.list({ from, to });
+          const dedupRows = parsed.map((tx) => ({
+            ...tx,
+            type: effectiveTypeOf(tx),
+          }));
+          duplicates = detectDuplicates(dedupRows, existing);
+        } catch {
+          /* se a checagem falhar, seguimos sem bloquear a importação */
+        }
+      }
+
       // Pré-categoriza cada linha; duplicatas/ignoradas entram desmarcadas.
       // Regras do usuário têm prioridade sobre a heurística.
       const kindById = categoryKindMap(categories);
       const reviewed: ReviewRow[] = parsed.map((tx, index) => {
         const duplicate = duplicates.get(index);
-        // Tipo efetivo: no modo cartão a compra vira despesa.
-        const effectiveType = isCardStatement
-          ? tx.type === purchaseParsedType
-            ? 'expense'
-            : 'income'
-          : tx.type;
+        const effectiveType = effectiveTypeOf(tx);
         const rule = applyUserRules(
           tx.description,
           tx.amount,
