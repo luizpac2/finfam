@@ -70,6 +70,7 @@ export interface Database {
           amount: number | null;
           action: RuleAction;
           category_id: string | null;
+          payment_method: PaymentMethod | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -80,6 +81,7 @@ export interface Database {
           amount?: number | null;
           action?: RuleAction;
           category_id?: string | null;
+          payment_method?: PaymentMethod | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -90,6 +92,7 @@ export interface Database {
           amount?: number | null;
           action?: RuleAction;
           category_id?: string | null;
+          payment_method?: PaymentMethod | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;

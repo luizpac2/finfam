@@ -120,6 +120,12 @@ export default function Import() {
         );
         const ignored = rule.ignore || undefined;
         const installment = parseInstallment(tx.description) ?? undefined;
+        // Forma de pagamento: a regra tem prioridade; senão, infere pela
+        // descrição (Pix, TED, boleto, dinheiro…). No modo cartão, é crédito.
+        const paymentMethod =
+          rule.paymentMethod ??
+          inferPaymentMethod(tx.description) ??
+          undefined;
 
         // Extrato de cartão: a COMPRA (sinal dominante) vira despesa ligada ao
         // cartão. O outro sinal é o pagamento da própria fatura (excluído) ou um
@@ -134,6 +140,7 @@ export default function Import() {
                 rule.categoryId ??
                 suggestCategoryId(tx.description, 'expense', categories),
               cardId: selectedCardId,
+              paymentMethod: 'credit_card',
               installment,
               ignored,
               duplicate,
@@ -146,6 +153,7 @@ export default function Import() {
             type: 'income',
             categoryId: '',
             cardId: isPayment ? undefined : selectedCardId,
+            paymentMethod: isPayment ? undefined : 'credit_card',
             cardPayment: isPayment || undefined,
             cardCredit: !isPayment || undefined,
             installment,
@@ -160,6 +168,7 @@ export default function Import() {
           categoryId:
             rule.categoryId ??
             suggestCategoryId(tx.description, tx.type, categories),
+          paymentMethod,
           installment,
           ignored,
           duplicate,
@@ -209,7 +218,6 @@ export default function Import() {
     const kindById = categoryKindMap(categories);
     setRows((current) =>
       current.map((row) => {
-        if (row.categoryId) return row;
         const rule = applyUserRules(
           row.description,
           row.amount,
@@ -217,12 +225,23 @@ export default function Import() {
           rules,
           kindById
         );
+        // Preenche a forma de pagamento se ainda estiver vazia (regra > inferência).
+        const paymentMethod =
+          row.paymentMethod ??
+          rule.paymentMethod ??
+          inferPaymentMethod(row.description) ??
+          undefined;
+        if (row.categoryId) {
+          return paymentMethod !== row.paymentMethod
+            ? { ...row, paymentMethod }
+            : row;
+        }
         const categoryId =
           rule.categoryId ??
           suggestCategoryId(row.description, row.type, categories);
-        if (!categoryId) return row;
-        filled += 1;
-        return { ...row, categoryId };
+        if (!categoryId && paymentMethod === row.paymentMethod) return row;
+        if (categoryId) filled += 1;
+        return { ...row, categoryId: categoryId || row.categoryId, paymentMethod };
       })
     );
     toast.success(
@@ -263,10 +282,9 @@ export default function Import() {
           userId: profile.id,
           categoryId: row.categoryId || null,
           cardId: row.cardId || null,
-          // Cartão vinculado → crédito; senão, infere pela descrição do extrato.
-          paymentMethod: row.cardId
-            ? 'credit_card'
-            : inferPaymentMethod(row.description),
+          // Já resolvida na revisão (regra > inferência); cartão sempre crédito.
+          paymentMethod:
+            row.paymentMethod ?? (row.cardId ? 'credit_card' : null),
         }))
       );
       toast.success(`${count} transação(ões) importada(s) com sucesso.`);

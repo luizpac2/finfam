@@ -9,6 +9,15 @@ import { unwrap } from './serviceError';
 
 const TABLE = 'category_rules';
 
+/** Erro do PostgREST de coluna `payment_method` ausente (migração 0017 pendente). */
+const isMissingPaymentColumn = (
+  error: { message?: string; details?: string; hint?: string } | null
+): boolean =>
+  !!error &&
+  /payment_method/i.test(
+    `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`
+  );
+
 /**
  * Serviço das regras de categorização por palavra-chave.
  * Leitura para membros ativos; escrita restrita a admins (via RLS).
@@ -32,14 +41,18 @@ export const categoryRuleService = {
 
   /** Cria uma regra (restrito a admins por RLS). */
   async create(input: CategoryRuleInput): Promise<CategoryRule> {
-    const row = unwrap(
-      await supabase
-        .from(TABLE)
-        .insert(mapToCategoryRuleRow(input))
-        .select()
-        .single(),
-      'criar a regra'
-    );
+    const payload = mapToCategoryRuleRow(input);
+    const run = (p: typeof payload) =>
+      supabase.from(TABLE).insert(p).select().single();
+
+    // Tolerante à migração 0017 pendente: reenvia sem `payment_method`.
+    let res = await run(payload);
+    if (res.error && 'payment_method' in payload && isMissingPaymentColumn(res.error)) {
+      const fallback = { ...payload };
+      delete fallback.payment_method;
+      res = await run(fallback);
+    }
+    const row = unwrap(res, 'criar a regra');
     return mapToCategoryRule(row);
   },
 

@@ -1,6 +1,7 @@
 import type {
   CategoryRuleRow,
   CategoryRuleInsert,
+  PaymentMethod,
   RuleAction,
 } from '../../lib/database.types';
 
@@ -23,6 +24,8 @@ export interface CategoryRule {
   amount: number | null;
   action: RuleAction;
   categoryId: string | null;
+  /** Forma de movimentação a aplicar quando a regra casa (null = não define). */
+  paymentMethod: PaymentMethod | null;
   createdAt: string;
 }
 
@@ -31,6 +34,7 @@ export interface CategoryRuleInput {
   amount?: number | null;
   action: RuleAction;
   categoryId?: string | null;
+  paymentMethod?: PaymentMethod | null;
   createdBy?: string | null;
 }
 
@@ -40,6 +44,8 @@ export const mapToCategoryRule = (row: CategoryRuleRow): CategoryRule => ({
   amount: row.amount,
   action: row.action,
   categoryId: row.category_id,
+  // Tolerante à migração 0017 ainda não aplicada (coluna ausente → null).
+  paymentMethod: row.payment_method ?? null,
   createdAt: row.created_at,
 });
 
@@ -54,6 +60,8 @@ export const mapToCategoryRuleRow = (
   if (input.amount !== undefined) row.amount = input.amount;
   if (input.action !== undefined) row.action = input.action;
   if (input.categoryId !== undefined) row.category_id = input.categoryId;
+  if (input.paymentMethod !== undefined)
+    row.payment_method = input.paymentMethod;
   if (input.createdBy !== undefined) row.created_by = input.createdBy;
   return row;
 };

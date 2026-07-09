@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
+import type { TransactionLite } from '../services/transactionService';
 import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import { parseInstallment } from '../domain/installments';
 import { applyUserRules, categoryKindMap } from '../domain/ruleEngine';
@@ -31,6 +32,16 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const isoDate = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+/** Formata uma fração (0–1) como percentual curto, ou null se não faz sentido. */
+const formatShare = (part: number, whole: number): string | null => {
+  if (whole <= 0 || part <= 0) return null;
+  const pct = (part / whole) * 100;
+  // Abaixo de 0,1% mostra "<0,1%"; senão, 1 casa (inteiro quando ≥ 10%).
+  if (pct < 0.1) return '<0,1%';
+  const digits = pct >= 10 ? 0 : 1;
+  return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: digits })}%`;
+};
+
 const now = new Date();
 
 type TypeFilter = 'all' | 'income' | 'expense';
@@ -47,6 +58,8 @@ export default function TransactionsPage() {
   const { categories, rules, loadingCategories } = useReferenceData();
   const [monthsWithData, setMonthsWithData] = useState<Set<string>>();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // Lançamentos do ANO inteiro (enxutos), para o percentual anual por categoria.
+  const [yearLite, setYearLite] = useState<TransactionLite[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -57,6 +70,7 @@ export default function TransactionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkCard, setBulkCard] = useState('');
+  const [bulkType, setBulkType] = useState('');
   const [applyingBulk, setApplyingBulk] = useState(false);
   const headerCbRef = useRef<HTMLInputElement>(null);
 
@@ -181,6 +195,58 @@ export default function TransactionsPage() {
     [filtered]
   );
 
+  // Carrega o ano inteiro (enxuto) para os percentuais anuais por categoria.
+  useEffect(() => {
+    const from = isoDate(new Date(period.year, 0, 1));
+    const to = isoDate(new Date(period.year, 11, 31));
+    let active = true;
+    transactionService
+      .listLite({ from, to })
+      .then((rows) => {
+        if (active) setYearLite(rows);
+      })
+      .catch(() => {
+        if (active) setYearLite([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [period.year]);
+
+  // Agregações do MÊS (todos os lançamentos carregados, ignorando filtros de
+  // tela): total por tipo e por categoria. Pagamento de fatura fica de fora.
+  const monthAgg = useMemo(() => {
+    const totalsByType = { income: 0, expense: 0 };
+    const byCat = new Map<string, { income: number; expense: number }>();
+    for (const tx of transactions) {
+      if (tx.category?.kind === 'credit_card') continue;
+      totalsByType[tx.type] += tx.amount;
+      if (!tx.categoryId) continue;
+      const e = byCat.get(tx.categoryId) ?? { income: 0, expense: 0 };
+      e[tx.type] += tx.amount;
+      byCat.set(tx.categoryId, e);
+    }
+    return { totalsByType, byCat };
+  }, [transactions]);
+
+  // Agregações do ANO por categoria (usa o kind do cache de categorias).
+  const yearAgg = useMemo(() => {
+    const totalsByType = { income: 0, expense: 0 };
+    const byCat = new Map<string, { income: number; expense: number }>();
+    for (const tx of yearLite) {
+      const kind = tx.categoryId
+        ? categoryById.get(tx.categoryId)?.kind
+        : undefined;
+      if (kind === 'credit_card') continue;
+      totalsByType[tx.type] += tx.amount;
+      if (!tx.categoryId) continue;
+      const e = byCat.get(tx.categoryId) ?? { income: 0, expense: 0 };
+      e[tx.type] += tx.amount;
+      byCat.set(tx.categoryId, e);
+    }
+    return { totalsByType, byCat };
+  }, [yearLite, categoryById]);
+
   const toggleRow = (id: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -265,6 +331,23 @@ export default function TransactionsPage() {
       toast.success(`Cartão atualizado em ${ids.length} lançamento(s).`);
       setSelectedIds(new Set());
       setBulkCard('');
+      await loadTransactions(period);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao atualizar.');
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
+  const applyBulkType = async () => {
+    if (bulkType !== 'income' && bulkType !== 'expense') return;
+    const ids = [...selectedIds];
+    setApplyingBulk(true);
+    try {
+      await transactionService.setTypeMany(ids, bulkType);
+      toast.success(`Tipo alterado em ${ids.length} lançamento(s).`);
+      setSelectedIds(new Set());
+      setBulkType('');
       await loadTransactions(period);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao atualizar.');
@@ -503,6 +586,24 @@ export default function TransactionsPage() {
                     </button>
                   </>
                 )}
+                <select
+                  value={bulkType}
+                  onChange={(e) => setBulkType(e.target.value)}
+                  aria-label="Mudar o tipo do lançamento"
+                  className="w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua sm:w-44"
+                >
+                  <option value="">Mudar tipo para…</option>
+                  <option value="income">Receita</option>
+                  <option value="expense">Despesa</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={applyBulkType}
+                  disabled={!bulkType || applyingBulk}
+                  className="rounded-lg border border-brand-moss/25 px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Aplicar tipo
+                </button>
                 <button
                   type="button"
                   onClick={bulkDelete}
@@ -579,6 +680,35 @@ export default function TransactionsPage() {
                       const signed =
                         tx.type === 'income' ? tx.amount : -tx.amount;
                       const selected = selectedIds.has(tx.id);
+
+                      // Percentuais discretos. Pagamento de fatura fica de fora.
+                      const isBillPayment =
+                        tx.category?.kind === 'credit_card';
+                      const txShare = isBillPayment
+                        ? null
+                        : formatShare(
+                            tx.amount,
+                            monthAgg.totalsByType[tx.type]
+                          );
+                      const catKind =
+                        category?.kind === 'income' ||
+                        category?.kind === 'expense'
+                          ? category.kind
+                          : null;
+                      const catMonthShare =
+                        catKind && tx.categoryId
+                          ? formatShare(
+                              monthAgg.byCat.get(tx.categoryId)?.[catKind] ?? 0,
+                              monthAgg.totalsByType[catKind]
+                            )
+                          : null;
+                      const catYearShare =
+                        catKind && tx.categoryId
+                          ? formatShare(
+                              yearAgg.byCat.get(tx.categoryId)?.[catKind] ?? 0,
+                              yearAgg.totalsByType[catKind]
+                            )
+                          : null;
                       return (
                         <tr
                           key={tx.id}
@@ -639,20 +769,32 @@ export default function TransactionsPage() {
                           </td>
                           <td className="px-4 py-2.5">
                             {category ? (
-                              <span className="inline-flex items-center gap-1.5 text-brand-moss">
-                                <span
-                                  className="flex h-5 w-5 items-center justify-center rounded-md"
-                                  style={{
-                                    backgroundColor: `${category.color ?? '#D8D8D8'}33`,
-                                  }}
-                                >
-                                  <CategoryIcon
-                                    name={category.icon}
-                                    className="h-3 w-3"
-                                  />
+                              <div>
+                                <span className="inline-flex items-center gap-1.5 text-brand-moss">
+                                  <span
+                                    className="flex h-5 w-5 items-center justify-center rounded-md"
+                                    style={{
+                                      backgroundColor: `${category.color ?? '#D8D8D8'}33`,
+                                    }}
+                                  >
+                                    <CategoryIcon
+                                      name={category.icon}
+                                      className="h-3 w-3"
+                                    />
+                                  </span>
+                                  {category.name}
                                 </span>
-                                {category.name}
-                              </span>
+                                {(catMonthShare || catYearShare) && (
+                                  <div
+                                    className="mt-0.5 text-[11px] text-brand-gray"
+                                    title="Participação desta categoria nos gastos do mês e do ano"
+                                  >
+                                    {catMonthShare && `${catMonthShare} do mês`}
+                                    {catMonthShare && catYearShare && ' · '}
+                                    {catYearShare && `${catYearShare} do ano`}
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-brand-gray">—</span>
                             )}
@@ -665,6 +807,14 @@ export default function TransactionsPage() {
                             }`}
                           >
                             {formatCurrencyAccounting(signed)}
+                            {txShare && (
+                              <div
+                                className="text-[11px] font-normal text-brand-gray"
+                                title="Participação deste lançamento no total do mês (mesmo tipo)"
+                              >
+                                {txShare} do mês
+                              </div>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-2 py-2.5 text-right">
                             <button

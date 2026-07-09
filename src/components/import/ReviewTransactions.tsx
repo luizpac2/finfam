@@ -9,7 +9,7 @@ import {
 import type { DuplicateReason } from '../../domain/duplicateDetection';
 import { isCardRefund } from '../../domain/categorizationEngine';
 import type { Installment } from '../../domain/installments';
-import type { TransactionType } from '../../lib/database.types';
+import type { PaymentMethod, TransactionType } from '../../lib/database.types';
 import { formatCurrencyAccounting } from '../../lib/format';
 import { CategorySelect } from '../ui/CategorySelect';
 
@@ -28,6 +28,8 @@ export interface ReviewRow extends ParsedTransaction {
   cardCredit?: boolean;
   /** Parcela detectada na descrição (ex.: 3/10), quando parcelado. */
   installment?: Installment;
+  /** Forma de pagamento (regra ou inferida na importação). */
+  paymentMethod?: PaymentMethod;
   /** Casou com uma regra de "ignorar" — desmarcada por padrão. */
   ignored?: boolean;
 }

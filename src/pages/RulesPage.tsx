@@ -28,6 +28,8 @@ import {
   type CategoryRule,
   type RuleAction,
 } from '../domain/entities/CategoryRule';
+import { PaymentMethodLabel, PaymentMethodOrder } from '../domain/constants';
+import type { PaymentMethod } from '../lib/database.types';
 import { Card } from '../components/ui/Card';
 import { CategorySelect } from '../components/ui/CategorySelect';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
@@ -77,6 +79,7 @@ export default function RulesPage() {
   const [amount, setAmount] = useState('');
   const [action, setAction] = useState<RuleAction>('categorize');
   const [categoryId, setCategoryId] = useState('');
+  const [rulePayment, setRulePayment] = useState<PaymentMethod | ''>('');
   const [filter, setFilter] = useState('');
 
   const categoryById = useMemo(() => {
@@ -121,8 +124,8 @@ export default function RulesPage() {
       toast.error('Valor inválido.');
       return;
     }
-    if (action === 'categorize' && !categoryId) {
-      toast.error('Escolha a categoria para a regra.');
+    if (action === 'categorize' && !categoryId && !rulePayment) {
+      toast.error('Escolha a categoria e/ou a forma de pagamento da regra.');
       return;
     }
     setSaving(true);
@@ -131,12 +134,14 @@ export default function RulesPage() {
         keyword: term || null,
         amount: value,
         action,
-        categoryId: action === 'categorize' ? categoryId : null,
+        categoryId: action === 'categorize' ? categoryId || null : null,
+        paymentMethod: action === 'categorize' ? rulePayment || null : null,
         createdBy: profile?.id ?? null,
       });
       setKeyword('');
       setAmount('');
       setCategoryId('');
+      setRulePayment('');
       toast.success('Regra criada.');
       await refreshRules();
     } catch (err) {
@@ -146,39 +151,61 @@ export default function RulesPage() {
     }
   };
 
-  // Aplica UMA regra a todo o histórico: recategoriza os lançamentos (mesmo os
-  // já categorizados) cuja descrição contém a palavra da regra.
+  // Aplica UMA regra a todo o histórico: recategoriza e/ou define a forma de
+  // pagamento dos lançamentos cuja descrição/valor casam com a regra.
   const applyRuleToHistory = async (rule: CategoryRule) => {
-    if (rule.action !== 'categorize' || !rule.categoryId) return;
-    const catName = categoryById.get(rule.categoryId)?.name ?? 'a categoria';
+    if (rule.action !== 'categorize' || (!rule.categoryId && !rule.paymentMethod))
+      return;
     setApplyingId(rule.id);
     try {
       const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
-      const ruleKind = categoryById.get(rule.categoryId)?.kind;
-      const ids = all
-        .filter(
-          (tx) =>
-            !isCategoryLocked(tx, hasManual) && // preserva edições manuais
-            categoryKindMatchesType(ruleKind, tx.type) && // respeita receita/despesa
-            tx.categoryId !== rule.categoryId &&
-            ruleMatches(rule, tx.description, tx.amount)
-        )
-        .map((tx) => tx.id);
+      const ruleKind = rule.categoryId
+        ? categoryById.get(rule.categoryId)?.kind
+        : undefined;
+      // Categoria: respeita o tipo e não toca no que já está certo.
+      const catIds =
+        rule.categoryId != null
+          ? all
+              .filter(
+                (tx) =>
+                  !isCategoryLocked(tx, hasManual) &&
+                  categoryKindMatchesType(ruleKind, tx.type) &&
+                  tx.categoryId !== rule.categoryId &&
+                  ruleMatches(rule, tx.description, tx.amount)
+              )
+              .map((tx) => tx.id)
+          : [];
+      // Forma de pagamento: só onde ainda difere.
+      const payIds =
+        rule.paymentMethod != null
+          ? all
+              .filter(
+                (tx) =>
+                  !isCategoryLocked(tx, hasManual) &&
+                  tx.paymentMethod !== rule.paymentMethod &&
+                  ruleMatches(rule, tx.description, tx.amount)
+              )
+              .map((tx) => tx.id)
+          : [];
 
-      if (ids.length === 0) {
+      const total = new Set([...catIds, ...payIds]).size;
+      if (total === 0) {
         toast.info('Nenhum lançamento do histórico para atualizar.');
         return;
       }
       if (
         !window.confirm(
-          `Recategorizar ${ids.length} lançamento(s) que casam com "${ruleConditionLabel(rule, formatCurrency)}" para "${catName}"? Isso vale para todo o histórico.`
+          `Aplicar a regra "${ruleConditionLabel(rule, formatCurrency)}" a ${total} lançamento(s) do histórico?`
         )
       )
         return;
 
-      await transactionService.setCategoryMany(ids, rule.categoryId);
-      toast.success(`${ids.length} lançamento(s) recategorizados.`);
+      if (catIds.length > 0)
+        await transactionService.setCategoryMany(catIds, rule.categoryId);
+      if (payIds.length > 0)
+        await transactionService.setPaymentMethodMany(payIds, rule.paymentMethod);
+      toast.success(`${total} lançamento(s) atualizados.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao aplicar a regra.');
     } finally {
@@ -186,10 +213,11 @@ export default function RulesPage() {
     }
   };
 
-  // Aplica TODAS as regras de categorização ao histórico de uma vez.
+  // Aplica TODAS as regras de categorização ao histórico de uma vez
+  // (categoria e/ou forma de pagamento).
   const applyAllToHistory = async () => {
     const hasCategorize = rules.some(
-      (r) => r.action === 'categorize' && r.categoryId
+      (r) => r.action === 'categorize' && (r.categoryId || r.paymentMethod)
     );
     if (!hasCategorize) {
       toast.info('Nenhuma regra de categorização para aplicar.');
@@ -200,23 +228,33 @@ export default function RulesPage() {
       const hasManual = await transactionService.hasManualCategoryColumn();
       const all = await transactionService.listLite({});
       const kindById = categoryKindMap(categories);
-      const groups = new Map<string, string[]>();
+      const catGroups = new Map<string, string[]>();
+      const payGroups = new Map<PaymentMethod, string[]>();
+      const touched = new Set<string>();
       for (const tx of all) {
         if (isCategoryLocked(tx, hasManual)) continue; // preserva edições manuais
-        const { categoryId } = applyUserRules(
+        const { categoryId, paymentMethod } = applyUserRules(
           tx.description,
           tx.amount,
           tx.type,
           rules,
           kindById
         );
-        if (!categoryId || tx.categoryId === categoryId) continue;
-        const list = groups.get(categoryId) ?? [];
-        list.push(tx.id);
-        groups.set(categoryId, list);
+        if (categoryId && tx.categoryId !== categoryId) {
+          const list = catGroups.get(categoryId) ?? [];
+          list.push(tx.id);
+          catGroups.set(categoryId, list);
+          touched.add(tx.id);
+        }
+        if (paymentMethod && tx.paymentMethod !== paymentMethod) {
+          const list = payGroups.get(paymentMethod) ?? [];
+          list.push(tx.id);
+          payGroups.set(paymentMethod, list);
+          touched.add(tx.id);
+        }
       }
 
-      const total = [...groups.values()].reduce((n, ids) => n + ids.length, 0);
+      const total = touched.size;
       if (total === 0) {
         toast.info('Nenhum lançamento do histórico para atualizar.');
         return;
@@ -228,10 +266,13 @@ export default function RulesPage() {
       )
         return;
 
-      for (const [catId, ids] of groups) {
+      for (const [catId, ids] of catGroups) {
         await transactionService.setCategoryMany(ids, catId);
       }
-      toast.success(`${total} lançamento(s) recategorizados.`);
+      for (const [method, ids] of payGroups) {
+        await transactionService.setPaymentMethodMany(ids, method);
+      }
+      toast.success(`${total} lançamento(s) atualizados.`);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Falha ao aplicar as regras.'
@@ -409,6 +450,24 @@ export default function RulesPage() {
               className="py-2"
             />
           </div>
+          <div className="w-full sm:w-44">
+            <select
+              value={rulePayment}
+              onChange={(e) =>
+                setRulePayment(e.target.value as PaymentMethod | '')
+              }
+              disabled={action === 'ignore'}
+              aria-label="Forma de pagamento da regra"
+              className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              <option value="">Forma de pagamento…</option>
+              {PaymentMethodOrder.map((m) => (
+                <option key={m} value={m}>
+                  {PaymentMethodLabel[m]}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             disabled={saving}
@@ -480,16 +539,28 @@ export default function RulesPage() {
                   onApply={() => applyRuleToHistory(rule)}
                   applying={applyingId === rule.id}
                 >
-                  <span className="inline-flex items-center gap-1.5 text-brand-moss">
-                    <span
-                      className="flex h-5 w-5 items-center justify-center rounded-md"
-                      style={{
-                        backgroundColor: `${category?.color ?? '#D8D8D8'}33`,
-                      }}
-                    >
-                      <CategoryIcon name={category?.icon} className="h-3 w-3" />
-                    </span>
-                    {category?.name ?? 'Categoria removida'}
+                  <span className="inline-flex items-center gap-1.5">
+                    {rule.categoryId && (
+                      <span className="inline-flex items-center gap-1.5 text-brand-moss">
+                        <span
+                          className="flex h-5 w-5 items-center justify-center rounded-md"
+                          style={{
+                            backgroundColor: `${category?.color ?? '#D8D8D8'}33`,
+                          }}
+                        >
+                          <CategoryIcon
+                            name={category?.icon}
+                            className="h-3 w-3"
+                          />
+                        </span>
+                        {category?.name ?? 'Categoria removida'}
+                      </span>
+                    )}
+                    {rule.paymentMethod && (
+                      <span className="inline-flex items-center rounded-md bg-brand-aqua/15 px-1.5 py-0.5 text-xs font-medium text-brand-moss">
+                        {PaymentMethodLabel[rule.paymentMethod]}
+                      </span>
+                    )}
                   </span>
                 </RuleRow>
               );
@@ -569,6 +640,16 @@ export default function RulesPage() {
             também há compras feitas nela (despesa) com a mesma descrição, cada
             um é categorizado no lado certo — a despesa nunca vira a categoria de
             receita.
+          </li>
+          <li>
+            <strong className="text-brand-moss">
+              Forma de pagamento (opcional).
+            </strong>{' '}
+            A regra também pode definir a{' '}
+            <span className="font-medium">forma de movimentação</span> (Pix, TED,
+            dinheiro, cartão…). Assim, por exemplo, tudo que contém “PIX” já entra
+            classificado como Pix — na importação e ao aplicar ao histórico. Uma
+            regra pode definir só a forma, só a categoria, ou as duas.
           </li>
           <li>
             <strong className="text-brand-moss">Categorizar × Ignorar.</strong>{' '}

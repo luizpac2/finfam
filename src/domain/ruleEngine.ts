@@ -1,6 +1,10 @@
 import type { CategoryRule } from './entities/CategoryRule';
 import type { Category } from './entities/Category';
-import type { CategoryKind, TransactionType } from '../lib/database.types';
+import type {
+  CategoryKind,
+  PaymentMethod,
+  TransactionType,
+} from '../lib/database.types';
 import { normalizeText } from './categorizationEngine';
 
 /** Tolerância para comparação de valores (centavos). */
@@ -63,6 +67,9 @@ export const categoryKindMap = (
  *   ignorado.
  * - Para "categorize", vale a PRIMEIRA regra que casa E cuja categoria é do
  *   mesmo TIPO do lançamento (receita↔receita, despesa↔despesa/cartão).
+ * - A forma de pagamento (`paymentMethod`) da PRIMEIRA regra que casa e a
+ *   define é aplicada — independentemente do tipo (Pix/TED/dinheiro não têm
+ *   direção de receita/despesa).
  *
  * `categoryKindById` é o mapa id→kind (ver `categoryKindMap`).
  */
@@ -72,23 +79,32 @@ export const applyUserRules = (
   type: TransactionType,
   rules: CategoryRule[],
   categoryKindById: Map<string, CategoryKind>
-): { ignore: boolean; categoryId: string | null } => {
+): {
+  ignore: boolean;
+  categoryId: string | null;
+  paymentMethod: PaymentMethod | null;
+} => {
   let categoryId: string | null = null;
+  let paymentMethod: PaymentMethod | null = null;
   let ignore = false;
 
   for (const rule of rules) {
     if (!ruleMatches(rule, description, amount)) continue;
     if (rule.action === 'ignore') {
       ignore = true;
-    } else if (
-      rule.action === 'categorize' &&
-      categoryId === null &&
-      rule.categoryId &&
-      categoryKindMatchesType(categoryKindById.get(rule.categoryId), type)
-    ) {
-      categoryId = rule.categoryId;
+    } else if (rule.action === 'categorize') {
+      if (
+        categoryId === null &&
+        rule.categoryId &&
+        categoryKindMatchesType(categoryKindById.get(rule.categoryId), type)
+      ) {
+        categoryId = rule.categoryId;
+      }
+      if (paymentMethod === null && rule.paymentMethod) {
+        paymentMethod = rule.paymentMethod;
+      }
     }
   }
 
-  return { ignore, categoryId };
+  return { ignore, categoryId, paymentMethod };
 };

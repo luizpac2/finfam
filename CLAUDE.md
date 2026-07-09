@@ -75,7 +75,9 @@ Tabelas em `public`:
   ⚠️ Tem **2 FKs para categories** (`category_id` e `card_id`): no embed do PostgREST use
   `categories!category_id ( ... )` senão dá erro de ambiguidade.
 - **category_rules** — regras do usuário: `keyword` (opcional), `amount` (opcional, numeric),
-  `action` (`categorize`|`ignore`), `category_id`. Precisa ter palavra E/OU valor.
+  `action` (`categorize`|`ignore`), `category_id`, `payment_method` (opcional; quando a regra
+  casa, também define a forma de movimentação). Precisa ter palavra E/OU valor; se `categorize`,
+  precisa ter categoria E/OU forma de pagamento.
 
 Tipos de domínio ficam em `lib/database.types.ts` (mantidos à mão). Ao alterar o
 schema, atualize esse arquivo + os mappers + este CLAUDE.md.
@@ -107,9 +109,17 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
 - **Forma de pagamento (`payment_method`):** exibida sob a descrição em Transações (nome do
   cartão quando `credit_card`, senão o rótulo Pix/TED/Dinheiro/…). No editor: seletor de forma
   em receitas e despesas; ao escolher "Cartão de crédito", um 2º seletor define QUAL cartão
-  (grava em `card_id`). Na importação é inferida (`domain/paymentMethod.inferPaymentMethod`) pela
-  descrição; no "modo cartão" já é `credit_card`. Serviço tolerante à coluna ausente (migração
-  0016 pendente): reenvia sem `payment_method` (`runTolerant`/fallback no `createMany`).
+  (grava em `card_id`). Na importação: a **regra** tem prioridade; senão é inferida
+  (`domain/paymentMethod.inferPaymentMethod`) pela descrição (Pix/TED/boleto/dinheiro/…); no
+  "modo cartão" já é `credit_card`. **Regras** também definem a forma (`applyUserRules` retorna
+  `paymentMethod`; "Aplicar ao histórico" grava categoria e/ou forma). Edição em massa em
+  Transações: além de categoria e cartão, muda o **tipo** (receita/despesa) via `setTypeMany`.
+  Serviços tolerantes à coluna ausente (migrações 0016/0017 pendentes): reenviam sem a coluna
+  (`runTolerant`/fallbacks; `setPaymentMethodMany` só ignora).
+- **Percentuais em Transações (discretos):** sob a categoria, quanto ela representa dos gastos
+  do **mês** e do **ano** (mesmo tipo); sob o valor, quanto o lançamento representa do total do
+  mês (mesmo tipo). Mês vem dos lançamentos já carregados; ano via `listLite` do ano inteiro
+  (`formatShare` no `TransactionsPage`). Pagamento de fatura fica de fora.
 - **Importação:** OFX/OFC/CSV/TXT/PDF. Exclui automaticamente "BB Rende Fácil"/"Resgate
   Poupança" (aplicações automáticas) em TODOS os formatos. PDF do BB: valor com sinal `(+)/(-)`,
   histórico multilinha. `parseStatementText` é **por bloco** (da data até a próxima data); o
@@ -145,7 +155,8 @@ hardening · `0012` RPC `financial_summary` (resumo agregado no banco) · `0013`
 `manual_category` (protege edição manual da aplicação de regras) · `0014`
 `categories.closed_at` (cartão vigente/cancelado) + RPC `card_months` (cobertura de faturas) ·
 `0015` `categories.opened_at` (cartão "vigente desde", para marcar faturas faltantes) · `0016`
-`transactions.payment_method` (forma de movimentação: cartão/Pix/TED/dinheiro/débito/boleto).
+`transactions.payment_method` (forma de movimentação: cartão/Pix/TED/dinheiro/débito/boleto) ·
+`0017` `category_rules.payment_method` (regra também classifica a forma de pagamento).
 `supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)

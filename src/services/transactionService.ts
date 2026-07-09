@@ -7,6 +7,7 @@ import {
   type TransactionInput,
 } from '../domain/entities/Transaction';
 import type {
+  PaymentMethod,
   TransactionInsert,
   TransactionRowWithCategory,
   TransactionStatus,
@@ -104,6 +105,8 @@ export interface TransactionLite {
   categoryId: string | null;
   /** true quando a categoria foi definida manualmente (regras não sobrescrevem). */
   manualCategory: boolean;
+  /** Forma de pagamento atual (null quando a coluna/migração 0016 não existe). */
+  paymentMethod: PaymentMethod | null;
 }
 
 /** Converte um termo numérico ("12,50", "12.50", "1234") em número, ou null. */
@@ -184,9 +187,16 @@ export const transactionService = {
       return query;
     };
 
-    // Tenta trazer a flag manual; se a migração 0013 ainda não rodou, refaz sem.
-    let res = await build(`${BASE}, manual_category`);
-    if (res.error && isMissingManualColumn(res.error)) res = await build(BASE);
+    // Tenta trazer a flag manual + forma de pagamento; se alguma migração
+    // (0013/0016) ainda não rodou, degrada o SELECT progressivamente.
+    let res = await build(`${BASE}, manual_category, payment_method`);
+    if (
+      res.error &&
+      (isMissingManualColumn(res.error) || isMissingPaymentColumn(res.error))
+    ) {
+      res = await build(`${BASE}, manual_category`);
+      if (res.error && isMissingManualColumn(res.error)) res = await build(BASE);
+    }
 
     const rows = unwrap(res, 'listar as transações');
     return (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
@@ -197,6 +207,7 @@ export const transactionService = {
       type: r.type as TransactionType,
       categoryId: (r.category_id as string | null) ?? null,
       manualCategory: Boolean(r.manual_category),
+      paymentMethod: (r.payment_method as PaymentMethod | null) ?? null,
     }));
   },
 
@@ -512,6 +523,43 @@ export const transactionService = {
       unwrap(
         await supabase.from(TABLE).update({ card_id: cardId }).in('id', part),
         'atualizar o cartão'
+      );
+    }
+  },
+
+  /**
+   * Define a forma de pagamento (`payment_method`) de várias transações.
+   * Tolerante à coluna ausente (migração 0016 pendente): não falha, só ignora.
+   */
+  async setPaymentMethodMany(
+    ids: string[],
+    paymentMethod: PaymentMethod | null
+  ): Promise<void> {
+    const CHUNK = 200;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK);
+      if (part.length === 0) continue;
+      const res = await supabase
+        .from(TABLE)
+        .update({ payment_method: paymentMethod })
+        .in('id', part);
+      if (res.error && isMissingPaymentColumn(res.error)) return; // migração pendente
+      unwrap(res, 'atualizar a forma de pagamento');
+    }
+  },
+
+  /**
+   * Altera o tipo (receita/despesa) de várias transações de uma vez. O `amount`
+   * é sempre positivo (o sinal vem do tipo), então só a coluna `type` muda.
+   */
+  async setTypeMany(ids: string[], type: TransactionType): Promise<void> {
+    const CHUNK = 200;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK);
+      if (part.length === 0) continue;
+      unwrap(
+        await supabase.from(TABLE).update({ type }).in('id', part),
+        'atualizar o tipo'
       );
     }
   },
