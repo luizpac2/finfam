@@ -130,19 +130,28 @@ export default function RulesPage() {
     }
     setSaving(true);
     try {
-      await categoryRuleService.create({
+      const wantedPayment = action === 'categorize' ? rulePayment || null : null;
+      const created = await categoryRuleService.create({
         keyword: term || null,
         amount: value,
         action,
         categoryId: action === 'categorize' ? categoryId || null : null,
-        paymentMethod: action === 'categorize' ? rulePayment || null : null,
+        paymentMethod: wantedPayment,
         createdBy: profile?.id ?? null,
       });
       setKeyword('');
       setAmount('');
       setCategoryId('');
       setRulePayment('');
-      toast.success('Regra criada.');
+      // Se a coluna `payment_method` (migração 0017) ainda não existe, o serviço
+      // grava a regra sem a forma — avisa em vez de perdê-la em silêncio.
+      if (wantedPayment && !created.paymentMethod) {
+        toast.info(
+          'Regra criada, mas a forma de pagamento não foi salva: rode a migração 0017 no Supabase.'
+        );
+      } else {
+        toast.success('Regra criada.');
+      }
       await refreshRules();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao salvar.');
