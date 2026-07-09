@@ -25,6 +25,7 @@ import { Card } from '../components/ui/Card';
 import { CategorySelect } from '../components/ui/CategorySelect';
 import { CategoryIcon } from '../lib/categoryIcons';
 import { formatCurrencyAccounting, formatDate } from '../lib/format';
+import { PaymentMethodLabel } from '../domain/constants';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const isoDate = (d: Date) =>
@@ -223,6 +224,7 @@ export default function TransactionsPage() {
         type: values.type,
         categoryId: values.categoryId || null,
         cardId: values.cardId || null,
+        paymentMethod: values.paymentMethod,
         // Edição na mão: protege a categoria da aplicação de regras ao histórico.
         manualCategory: true,
       };
@@ -561,6 +563,19 @@ export default function TransactionsPage() {
                       const card = tx.cardId
                         ? categoryById.get(tx.cardId)
                         : undefined;
+                      // Forma de movimentação exibida sob a descrição: cartão
+                      // (com nome, se conhecido), ou o rótulo do método (Pix,
+                      // TED, dinheiro…). Cartão vinculado implica crédito.
+                      const isCredit =
+                        tx.paymentMethod === 'credit_card' || !!card;
+                      const methodLabel = isCredit
+                        ? card
+                          ? null // mostramos o cartão específico abaixo
+                          : PaymentMethodLabel.credit_card
+                        : tx.paymentMethod
+                          ? PaymentMethodLabel[tx.paymentMethod]
+                          : null;
+                      const showMeta = isCredit || !!methodLabel;
                       const signed =
                         tx.type === 'income' ? tx.amount : -tx.amount;
                       const selected = selectedIds.has(tx.id);
@@ -597,7 +612,7 @@ export default function TransactionsPage() {
                               )}
                               <span className="truncate">{tx.description}</span>
                             </div>
-                            {(card || inst) && (
+                            {showMeta && (
                               <div className="mt-0.5 flex items-center gap-1 text-xs text-brand-gray">
                                 {card ? (
                                   <>
@@ -612,12 +627,12 @@ export default function TransactionsPage() {
                                         className="h-2.5 w-2.5"
                                       />
                                     </span>
-                                    <span className="truncate">{card.name}</span>
+                                    <span className="truncate">
+                                      {card.name}
+                                    </span>
                                   </>
                                 ) : (
-                                  <span className="italic">
-                                    Outra forma (transferência/boleto)
-                                  </span>
+                                  <span className="truncate">{methodLabel}</span>
                                 )}
                               </div>
                             )}

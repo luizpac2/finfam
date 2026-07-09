@@ -1,3 +1,4 @@
+import type { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import {
   mapToTransaction,
@@ -6,9 +7,11 @@ import {
   type TransactionInput,
 } from '../domain/entities/Transaction';
 import type {
+  TransactionInsert,
   TransactionRowWithCategory,
   TransactionStatus,
   TransactionType,
+  TransactionUpdate,
 } from '../lib/database.types';
 import { ServiceError, unwrap } from './serviceError';
 
@@ -34,6 +37,48 @@ const isMissingManualColumn = (
   /manual_category/i.test(
     `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`
   );
+
+/**
+ * Detecta o erro do PostgREST quando a coluna `payment_method` ainda não existe
+ * (migração 0016 não aplicada). Permite escrever de forma tolerante — um deploy
+ * antes da migration ainda importa/salva (sem a forma de pagamento).
+ */
+const isMissingPaymentColumn = (
+  error: { message?: string; details?: string; hint?: string } | null
+): boolean =>
+  !!error &&
+  /payment_method/i.test(
+    `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`
+  );
+
+/**
+ * Executa uma escrita (insert/update) e, se o erro for de coluna opcional
+ * ainda inexistente (`manual_category` 0013 ou `payment_method` 0016), remove
+ * a coluna faltante e tenta de novo. Assim um deploy anterior à migração não
+ * falha nem perde os demais campos.
+ */
+type WriteResult = { data: unknown; error: PostgrestError | null };
+const runTolerant = async (
+  payload: Record<string, unknown>,
+  run: (p: Record<string, unknown>) => PromiseLike<WriteResult>
+): Promise<WriteResult> => {
+  const current = { ...payload };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const res = await run(current);
+    if (!res.error) return res;
+    let changed = false;
+    if (isMissingManualColumn(res.error) && 'manual_category' in current) {
+      delete current.manual_category;
+      changed = true;
+    }
+    if (isMissingPaymentColumn(res.error) && 'payment_method' in current) {
+      delete current.payment_method;
+      changed = true;
+    }
+    if (!changed) return res;
+  }
+  return run(current);
+};
 
 export interface TransactionFilters {
   type?: TransactionType;
@@ -315,7 +360,7 @@ export const transactionService = {
 
   /** Cria uma transação. O `userId` deve ser o id do perfil autenticado. */
   async create(input: TransactionInput): Promise<Transaction> {
-    const base = {
+    const payload: Record<string, unknown> = {
       description: input.description,
       amount: Math.abs(Number(input.amount)),
       type: input.type,
@@ -325,17 +370,18 @@ export const transactionService = {
       category_id: input.categoryId ?? null,
       card_id: input.cardId ?? null,
     };
-    const withManual =
-      input.manualCategory !== undefined
-        ? { ...base, manual_category: input.manualCategory }
-        : base;
-    const runInsert = (payload: typeof base | typeof withManual) =>
-      supabase.from(TABLE).insert(payload).select(SELECT_WITH_CATEGORY).single();
+    if (input.manualCategory !== undefined)
+      payload.manual_category = input.manualCategory;
+    if (input.paymentMethod !== undefined)
+      payload.payment_method = input.paymentMethod;
 
-    let res = await runInsert(withManual);
-    if (res.error && withManual !== base && isMissingManualColumn(res.error))
-      res = await runInsert(base);
-
+    const res = await runTolerant(payload, (p) =>
+      supabase
+        .from(TABLE)
+        .insert(p as TransactionInsert)
+        .select(SELECT_WITH_CATEGORY)
+        .single()
+    );
     const row = unwrap(res, 'criar a transação');
     return mapToTransaction(row as unknown as TransactionRowWithCategory);
   },
@@ -345,26 +391,15 @@ export const transactionService = {
     id: string,
     input: Partial<TransactionInput>
   ): Promise<Transaction> {
-    const rowInput = mapToTransactionRow(input);
-    const runUpdate = (payload: typeof rowInput) =>
+    const rowInput = mapToTransactionRow(input) as Record<string, unknown>;
+    const res = await runTolerant(rowInput, (p) =>
       supabase
         .from(TABLE)
-        .update(payload)
+        .update(p as TransactionUpdate)
         .eq('id', id)
         .select(SELECT_WITH_CATEGORY)
-        .single();
-
-    let res = await runUpdate(rowInput);
-    if (
-      res.error &&
-      'manual_category' in rowInput &&
-      isMissingManualColumn(res.error)
-    ) {
-      const fallback = { ...rowInput };
-      delete fallback.manual_category;
-      res = await runUpdate(fallback);
-    }
-
+        .single()
+    );
     const row = unwrap(res, 'atualizar a transação');
     return mapToTransaction(row as unknown as TransactionRowWithCategory);
   },
@@ -376,20 +411,39 @@ export const transactionService = {
    */
   async createMany(inputs: TransactionInput[]): Promise<number> {
     if (inputs.length === 0) return 0;
-    const rows = inputs.map((input) => ({
-      description: input.description,
-      amount: Math.abs(Number(input.amount)),
-      type: input.type,
-      user_id: input.userId,
-      date: input.date,
-      status: input.status ?? 'pending',
-      category_id: input.categoryId ?? null,
-      card_id: input.cardId ?? null,
-    }));
-    const data = unwrap(
-      await supabase.from(TABLE).insert(rows).select('id'),
-      'importar as transações'
-    );
+    const rows: Record<string, unknown>[] = inputs.map((input) => {
+      const row: Record<string, unknown> = {
+        description: input.description,
+        amount: Math.abs(Number(input.amount)),
+        type: input.type,
+        user_id: input.userId,
+        date: input.date,
+        status: input.status ?? 'pending',
+        category_id: input.categoryId ?? null,
+        card_id: input.cardId ?? null,
+      };
+      if (input.paymentMethod !== undefined)
+        row.payment_method = input.paymentMethod;
+      return row;
+    });
+    // Se `payment_method` ainda não existe (migração 0016 pendente), reenvia
+    // sem a coluna para não impedir a importação.
+    let res = await supabase
+      .from(TABLE)
+      .insert(rows as TransactionInsert[])
+      .select('id');
+    if (res.error && isMissingPaymentColumn(res.error)) {
+      const stripped = rows.map((r) => {
+        const rest = { ...r };
+        delete rest.payment_method;
+        return rest;
+      });
+      res = await supabase
+        .from(TABLE)
+        .insert(stripped as TransactionInsert[])
+        .select('id');
+    }
+    const data = unwrap(res, 'importar as transações');
     return data.length;
   },
 

@@ -69,7 +69,9 @@ Tabelas em `public`:
 - **transactions** — `id`, `date`, `description`, `amount` (sempre ≥0; sinal vem de `type`),
   `type` (`income`|`expense`), `status` (`pending`|`paid`|`cancelled`), `category_id`,
   `card_id` (→categoria do cartão, na importação de fatura), `user_id` (→users.id, o autor),
-  `manual_category` (bool; `true` = categoria definida à mão → regras/auto NÃO sobrescrevem).
+  `manual_category` (bool; `true` = categoria definida à mão → regras/auto NÃO sobrescrevem),
+  `payment_method` (forma de movimentação: `credit_card`|`debit_card`|`pix`|`ted`|`cash`|`boleto`|
+  `other`, ou null; quando `credit_card` o cartão específico continua em `card_id`).
   ⚠️ Tem **2 FKs para categories** (`category_id` e `card_id`): no embed do PostgREST use
   `categories!category_id ( ... )` senão dá erro de ambiguidade.
 - **category_rules** — regras do usuário: `keyword` (opcional), `amount` (opcional, numeric),
@@ -102,6 +104,12 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   `formatCurrencyAccounting`.
 - **Cartão de crédito:** o pagamento da fatura no extrato do banco (categoria `credit_card`)
   **NÃO** conta em despesas/saldo (as compras da fatura já entram como despesas).
+- **Forma de pagamento (`payment_method`):** exibida sob a descrição em Transações (nome do
+  cartão quando `credit_card`, senão o rótulo Pix/TED/Dinheiro/…). No editor: seletor de forma
+  em receitas e despesas; ao escolher "Cartão de crédito", um 2º seletor define QUAL cartão
+  (grava em `card_id`). Na importação é inferida (`domain/paymentMethod.inferPaymentMethod`) pela
+  descrição; no "modo cartão" já é `credit_card`. Serviço tolerante à coluna ausente (migração
+  0016 pendente): reenvia sem `payment_method` (`runTolerant`/fallback no `createMany`).
 - **Importação:** OFX/OFC/CSV/TXT/PDF. Exclui automaticamente "BB Rende Fácil"/"Resgate
   Poupança" (aplicações automáticas) em TODOS os formatos. PDF do BB: valor com sinal `(+)/(-)`,
   histórico multilinha. `parseStatementText` é **por bloco** (da data até a próxima data); o
@@ -136,7 +144,8 @@ meses-com-lançamentos (RPC) · `0010` regras por valor · `0011` índice trigra
 hardening · `0012` RPC `financial_summary` (resumo agregado no banco) · `0013`
 `manual_category` (protege edição manual da aplicação de regras) · `0014`
 `categories.closed_at` (cartão vigente/cancelado) + RPC `card_months` (cobertura de faturas) ·
-`0015` `categories.opened_at` (cartão "vigente desde", para marcar faturas faltantes).
+`0015` `categories.opened_at` (cartão "vigente desde", para marcar faturas faltantes) · `0016`
+`transactions.payment_method` (forma de movimentação: cartão/Pix/TED/dinheiro/débito/boleto).
 `supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)

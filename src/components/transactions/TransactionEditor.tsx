@@ -5,7 +5,8 @@ import { Modal } from '../ui/Modal';
 import { CategorySelect } from '../ui/CategorySelect';
 import type { Category } from '../../domain/entities/Category';
 import type { Transaction } from '../../domain/entities/Transaction';
-import type { TransactionType } from '../../lib/database.types';
+import type { PaymentMethod, TransactionType } from '../../lib/database.types';
+import { PaymentMethodLabel, PaymentMethodOrder } from '../../domain/constants';
 
 export interface TransactionFormValues {
   date: string;
@@ -13,8 +14,10 @@ export interface TransactionFormValues {
   type: TransactionType;
   amount: number;
   categoryId: string;
-  /** Cartão da compra (forma de pagamento); '' = outra forma (transferência…). */
+  /** Cartão de crédito da compra (só quando a forma é cartão de crédito). */
   cardId: string;
+  /** Forma de movimentação (Pix, TED, dinheiro, cartão…); null = não informada. */
+  paymentMethod: PaymentMethod | null;
 }
 
 interface TransactionEditorProps {
@@ -43,6 +46,7 @@ export function TransactionEditor({
     amount: initial ? String(initial.amount) : '',
     categoryId: initial?.categoryId ?? '',
     cardId: initial?.cardId ?? '',
+    paymentMethod: (initial?.paymentMethod ?? '') as PaymentMethod | '',
   }));
 
   // Cartões (categorias tipo credit_card) — para oferecer "Cartão" no seletor
@@ -80,14 +84,22 @@ export function TransactionEditor({
     event.preventDefault();
     const amount = Math.abs(Number(form.amount)) || 0;
     if (!form.description.trim() || !form.date || amount === 0) return;
+    // No pseudo-tipo "Cartão" a própria categoria é o cartão → método = crédito.
+    const isCardKind = activeTipo === 'card';
+    const paymentMethod: PaymentMethod | null = isCardKind
+      ? 'credit_card'
+      : form.paymentMethod || null;
     onSubmit({
       date: form.date,
       description: form.description.trim(),
       type: form.type,
       amount,
       categoryId: form.categoryId,
-      // Só despesas "normais" têm cartão da compra (não em receita/pagto fatura).
-      cardId: activeTipo === 'expense' ? form.cardId : '',
+      // Cartão específico só quando a forma escolhida é cartão de crédito
+      // (e não é o pseudo-tipo "Cartão", em que o cartão já é a categoria).
+      cardId:
+        !isCardKind && form.paymentMethod === 'credit_card' ? form.cardId : '',
+      paymentMethod,
     });
   };
 
@@ -199,27 +211,58 @@ export function TransactionEditor({
           />
         </label>
 
-        {/* Forma de pagamento (cartão da compra) — só para despesas normais. */}
-        {activeTipo === 'expense' && hasCards && (
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-brand-moss">
-              Forma de pagamento
-            </span>
-            <select
-              value={form.cardId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, cardId: e.target.value }))
-              }
-              className={inputClass}
-            >
-              <option value="">Outra (transferência, boleto…)</option>
-              {cards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        {/* Forma de pagamento — em receitas e despesas (no pseudo-tipo "Cartão"
+            o próprio tipo já define o crédito). Quando é cartão de crédito,
+            escolhe-se qual cartão. */}
+        {activeTipo !== 'card' && (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-brand-moss">
+                Forma de pagamento
+              </span>
+              <select
+                value={form.paymentMethod}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    paymentMethod: e.target.value as PaymentMethod | '',
+                    // Trocar de cartão de crédito para outra forma limpa o cartão.
+                    cardId: e.target.value === 'credit_card' ? f.cardId : '',
+                  }))
+                }
+                className={inputClass}
+              >
+                <option value="">Não informada</option>
+                {PaymentMethodOrder.map((m) => (
+                  <option key={m} value={m}>
+                    {PaymentMethodLabel[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {form.paymentMethod === 'credit_card' && hasCards && (
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-brand-moss">
+                  Qual cartão?
+                </span>
+                <select
+                  value={form.cardId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cardId: e.target.value }))
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Selecione o cartão…</option>
+                  {cards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         )}
 
         <div className="flex justify-end gap-2 pt-2">

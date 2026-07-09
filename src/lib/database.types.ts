@@ -12,6 +12,14 @@ export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'pending' | 'paid' | 'cancelled';
 export type CategoryKind = 'income' | 'expense' | 'credit_card';
 export type RuleAction = 'categorize' | 'ignore';
+export type PaymentMethod =
+  | 'credit_card'
+  | 'debit_card'
+  | 'pix'
+  | 'ted'
+  | 'cash'
+  | 'boleto'
+  | 'other';
 
 export interface Database {
   public: {
@@ -137,6 +145,7 @@ export interface Database {
           status: TransactionStatus;
           category_id: string | null;
           card_id: string | null;
+          payment_method: PaymentMethod | null;
           user_id: string;
           manual_category: boolean;
           created_at: string;
@@ -151,6 +160,7 @@ export interface Database {
           status?: TransactionStatus;
           category_id?: string | null;
           card_id?: string | null;
+          payment_method?: PaymentMethod | null;
           user_id: string;
           manual_category?: boolean;
           created_at?: string;
@@ -165,6 +175,7 @@ export interface Database {
           status?: TransactionStatus;
           category_id?: string | null;
           card_id?: string | null;
+          payment_method?: PaymentMethod | null;
           user_id?: string;
           manual_category?: boolean;
           created_at?: string;

@@ -7,6 +7,7 @@
  */
 import type {
   CategoryKind,
+  PaymentMethod,
   TransactionStatus,
   TransactionType,
   UserRole,
@@ -53,6 +54,28 @@ export const CategoryKindLabel: Record<CategoryKind, string> = {
   expense: 'Despesa',
   credit_card: 'Cartão de Crédito',
 };
+
+/** Rótulos das formas de pagamento (movimentação do lançamento). */
+export const PaymentMethodLabel: Record<PaymentMethod, string> = {
+  credit_card: 'Cartão de crédito',
+  debit_card: 'Cartão de débito',
+  pix: 'Pix',
+  ted: 'TED',
+  cash: 'Dinheiro',
+  boleto: 'Boleto',
+  other: 'Outra',
+};
+
+/** Ordem de exibição das formas de pagamento no seletor. */
+export const PaymentMethodOrder: PaymentMethod[] = [
+  'credit_card',
+  'debit_card',
+  'pix',
+  'ted',
+  'boleto',
+  'cash',
+  'other',
+];
 
 export const UserRoleLabel: Record<UserRole, string> = {
   admin: 'Administrador',

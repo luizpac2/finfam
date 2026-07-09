@@ -3,6 +3,7 @@ import type {
   TransactionType,
   TransactionRowWithCategory,
   TransactionUpdate,
+  PaymentMethod,
 } from '../../lib/database.types';
 import { mapToCategory, type Category } from './Category';
 
@@ -15,6 +16,8 @@ export interface Transaction {
   status: TransactionStatus;
   categoryId: string | null;
   cardId: string | null; // cartão de crédito da compra (importação de fatura)
+  /** forma de movimentação (cartão, Pix, TED, dinheiro…); null = desconhecida. */
+  paymentMethod: PaymentMethod | null;
   userId: string;
   /** true quando a categoria foi definida manualmente (regras não sobrescrevem). */
   manualCategory: boolean;
@@ -30,6 +33,7 @@ export interface TransactionInput {
   status?: TransactionStatus;
   categoryId?: string | null;
   cardId?: string | null;
+  paymentMethod?: PaymentMethod | null;
   userId: string;
   manualCategory?: boolean;
 }
@@ -46,6 +50,8 @@ export const mapToTransaction = (
   status: row.status,
   categoryId: row.category_id,
   cardId: row.card_id,
+  // Tolerante à migração 0016 ainda não aplicada (coluna ausente → null).
+  paymentMethod: row.payment_method ?? null,
   userId: row.user_id,
   // Tolerante à migração 0013 ainda não aplicada (coluna ausente → false).
   manualCategory: Boolean(row.manual_category),
@@ -65,6 +71,8 @@ export const mapToTransactionRow = (
   if (input.status !== undefined) row.status = input.status;
   if (input.categoryId !== undefined) row.category_id = input.categoryId;
   if (input.cardId !== undefined) row.card_id = input.cardId;
+  if (input.paymentMethod !== undefined)
+    row.payment_method = input.paymentMethod;
   if (input.userId !== undefined) row.user_id = input.userId;
   if (input.manualCategory !== undefined)
     row.manual_category = input.manualCategory;

@@ -12,6 +12,7 @@ import {
   suggestCategoryId,
 } from '../domain/categorizationEngine';
 import { parseInstallment } from '../domain/installments';
+import { inferPaymentMethod } from '../domain/paymentMethod';
 import { applyUserRules, categoryKindMap } from '../domain/ruleEngine';
 import type { TransactionType } from '../lib/database.types';
 import {
@@ -262,6 +263,10 @@ export default function Import() {
           userId: profile.id,
           categoryId: row.categoryId || null,
           cardId: row.cardId || null,
+          // Cartão vinculado → crédito; senão, infere pela descrição do extrato.
+          paymentMethod: row.cardId
+            ? 'credit_card'
+            : inferPaymentMethod(row.description),
         }))
       );
       toast.success(`${count} transação(ões) importada(s) com sucesso.`);
