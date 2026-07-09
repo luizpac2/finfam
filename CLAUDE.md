@@ -112,7 +112,9 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   (grava em `card_id`). Na importação: a **regra** tem prioridade; senão é inferida
   (`domain/paymentMethod.inferPaymentMethod`) pela descrição (Pix/TED/boleto/dinheiro/…); no
   "modo cartão" já é `credit_card`. **Regras** também definem a forma (`applyUserRules` retorna
-  `paymentMethod`; "Aplicar ao histórico" grava categoria e/ou forma). Edição em massa em
+  `paymentMethod`; "Aplicar ao histórico" grava categoria e/ou forma). Regras são **editáveis**
+  (lápis → formulário → "Salvar alterações" via `categoryRuleService.update`); depois de editar,
+  o botão de aplicar usa a versão nova. Edição em massa em
   Transações: além de categoria e cartão, define a **forma de pagamento** via
   `setPaymentMethodMany` (opção "Nenhuma (limpar)" = null). Serviços tolerantes à coluna
   ausente (migrações 0016/0017 pendentes): reenviam sem a coluna (`runTolerant`/fallbacks;

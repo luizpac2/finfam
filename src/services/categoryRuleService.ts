@@ -56,6 +56,26 @@ export const categoryRuleService = {
     return mapToCategoryRule(row);
   },
 
+  /** Atualiza uma regra existente (restrito a admins por RLS). */
+  async update(
+    id: string,
+    input: Partial<CategoryRuleInput>
+  ): Promise<CategoryRule> {
+    const payload = mapToCategoryRuleRow(input);
+    const run = (p: typeof payload) =>
+      supabase.from(TABLE).update(p).eq('id', id).select().single();
+
+    // Tolerante à migração 0017 pendente: reenvia sem `payment_method`.
+    let res = await run(payload);
+    if (res.error && 'payment_method' in payload && isMissingPaymentColumn(res.error)) {
+      const fallback = { ...payload };
+      delete fallback.payment_method;
+      res = await run(fallback);
+    }
+    const row = unwrap(res, 'atualizar a regra');
+    return mapToCategoryRule(row);
+  },
+
   /** Remove uma regra (restrito a admins por RLS). */
   async remove(id: string): Promise<void> {
     unwrap(

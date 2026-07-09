@@ -4,6 +4,7 @@ import {
   Eraser,
   Info,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -80,7 +81,29 @@ export default function RulesPage() {
   const [action, setAction] = useState<RuleAction>('categorize');
   const [categoryId, setCategoryId] = useState('');
   const [rulePayment, setRulePayment] = useState<PaymentMethod | ''>('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+
+  // Preenche o formulário com uma regra para edição.
+  const startEdit = (rule: CategoryRule) => {
+    setEditingId(rule.id);
+    setKeyword(rule.keyword);
+    setAmount(rule.amount != null ? String(rule.amount) : '');
+    setAction(rule.action);
+    setCategoryId(rule.categoryId ?? '');
+    setRulePayment(rule.paymentMethod ?? '');
+    // Traz o formulário para a viewport (fica no topo da página).
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setKeyword('');
+    setAmount('');
+    setAction('categorize');
+    setCategoryId('');
+    setRulePayment('');
+  };
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();
@@ -131,26 +154,29 @@ export default function RulesPage() {
     setSaving(true);
     try {
       const wantedPayment = action === 'categorize' ? rulePayment || null : null;
-      const created = await categoryRuleService.create({
+      const payload = {
         keyword: term || null,
         amount: value,
         action,
         categoryId: action === 'categorize' ? categoryId || null : null,
         paymentMethod: wantedPayment,
-        createdBy: profile?.id ?? null,
-      });
-      setKeyword('');
-      setAmount('');
-      setCategoryId('');
-      setRulePayment('');
+      };
+      const saved = editingId
+        ? await categoryRuleService.update(editingId, payload)
+        : await categoryRuleService.create({
+            ...payload,
+            createdBy: profile?.id ?? null,
+          });
+      const wasEditing = editingId !== null;
+      cancelEdit();
       // Se a coluna `payment_method` (migração 0017) ainda não existe, o serviço
       // grava a regra sem a forma — avisa em vez de perdê-la em silêncio.
-      if (wantedPayment && !created.paymentMethod) {
+      if (wantedPayment && !saved.paymentMethod) {
         toast.info(
-          'Regra criada, mas a forma de pagamento não foi salva: rode a migração 0017 no Supabase.'
+          'Regra salva, mas a forma de pagamento não foi gravada: rode a migração 0017 no Supabase.'
         );
       } else {
-        toast.success('Regra criada.');
+        toast.success(wasEditing ? 'Regra atualizada.' : 'Regra criada.');
       }
       await refreshRules();
     } catch (err) {
@@ -402,10 +428,10 @@ export default function RulesPage() {
         </p>
       </header>
 
-      {/* Formulário — compacto */}
-      <Card className="p-4">
+      {/* Formulário — compacto (cria ou edita) */}
+      <Card className={`p-4 ${editingId ? 'ring-2 ring-brand-aqua/50' : ''}`}>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-gray">
-          Nova regra
+          {editingId ? 'Editar regra' : 'Nova regra'}
         </p>
         <form
           onSubmit={handleSubmit}
@@ -477,18 +503,30 @@ export default function RulesPage() {
               ))}
             </select>
           </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="ml-auto inline-flex items-center gap-2 rounded-lg bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
+          <div className="ml-auto flex items-center gap-2">
+            {editingId && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                disabled={saving}
+                className="rounded-lg border border-brand-moss/25 px-3 py-2 text-sm font-medium text-brand-gray transition hover:bg-brand-light disabled:opacity-60"
+              >
+                Cancelar
+              </button>
             )}
-            Adicionar
-          </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-aqua px-5 py-2 text-sm font-medium text-brand-moss shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              {editingId ? 'Salvar alterações' : 'Adicionar'}
+            </button>
+          </div>
         </form>
       </Card>
 
@@ -545,8 +583,10 @@ export default function RulesPage() {
                   amount={rule.amount}
                   busy={busyId === rule.id}
                   onRemove={() => remove(rule)}
+                  onEdit={() => startEdit(rule)}
                   onApply={() => applyRuleToHistory(rule)}
                   applying={applyingId === rule.id}
+                  editing={editingId === rule.id}
                 >
                   <span className="inline-flex items-center gap-1.5">
                     {rule.categoryId && (
@@ -610,8 +650,10 @@ export default function RulesPage() {
                 amount={rule.amount}
                 busy={busyId === rule.id}
                 onRemove={() => remove(rule)}
+                onEdit={() => startEdit(rule)}
                 onApply={() => applyIgnoreRuleToHistory(rule)}
                 applying={applyingId === rule.id}
+                editing={editingId === rule.id}
                 applyIcon="delete"
                 applyTitle="Excluir do histórico os lançamentos que casam"
               >
@@ -674,6 +716,12 @@ export default function RulesPage() {
             histórico não sobrescreve nem exclui esse lançamento.
           </li>
           <li>
+            <strong className="text-brand-moss">Editar uma regra.</strong> O lápis
+            traz a regra para o formulário; ao salvar, ela é atualizada. Em
+            seguida, o botão de recarregar aplica a <em>versão editada</em> ao
+            histórico.
+          </li>
+          <li>
             <strong className="text-brand-moss">Aplicar ao histórico.</strong> O
             botão de recarregar em cada regra (ou “Aplicar ao histórico” no topo)
             reprocessa os lançamentos já salvos, seguindo todas as regras acima.
@@ -723,8 +771,10 @@ function RuleRow({
   amount,
   busy,
   onRemove,
+  onEdit,
   onApply,
   applying = false,
+  editing = false,
   applyIcon = 'apply',
   applyTitle = 'Aplicar esta regra a todo o histórico',
   children,
@@ -733,8 +783,10 @@ function RuleRow({
   amount: number | null;
   busy: boolean;
   onRemove: () => void;
+  onEdit?: () => void;
   onApply?: () => void;
   applying?: boolean;
+  editing?: boolean;
   applyIcon?: 'apply' | 'delete';
   applyTitle?: string;
   children: ReactNode;
@@ -742,7 +794,11 @@ function RuleRow({
   const isDelete = applyIcon === 'delete';
   const label = ruleConditionLabel({ keyword, amount }, formatCurrency);
   return (
-    <li className="flex items-center justify-between gap-3 px-4 py-2">
+    <li
+      className={`flex items-center justify-between gap-3 px-4 py-2 ${
+        editing ? 'bg-brand-aqua/10' : ''
+      }`}
+    >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <div className="flex shrink-0 flex-wrap items-center gap-1">
           {keyword && (
@@ -763,6 +819,18 @@ function RuleRow({
         <span className="min-w-0 truncate">{children}</span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={busy || applying}
+            title="Editar esta regra"
+            className="rounded-lg p-1.5 text-brand-gray transition hover:bg-white hover:text-brand-moss disabled:opacity-50"
+            aria-label={`Editar regra ${label}`}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
         {onApply && (
           <button
             type="button"
