@@ -549,22 +549,6 @@ export const transactionService = {
   },
 
   /**
-   * Altera o tipo (receita/despesa) de várias transações de uma vez. O `amount`
-   * é sempre positivo (o sinal vem do tipo), então só a coluna `type` muda.
-   */
-  async setTypeMany(ids: string[], type: TransactionType): Promise<void> {
-    const CHUNK = 200;
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const part = ids.slice(i, i + CHUNK);
-      if (part.length === 0) continue;
-      unwrap(
-        await supabase.from(TABLE).update({ type }).in('id', part),
-        'atualizar o tipo'
-      );
-    }
-  },
-
-  /**
    * Resumo financeiro (receitas, despesas e saldo) no período, agregado no
    * BANCO (RPC `financial_summary`) — não baixa o histórico para o cliente.
    * Exclui pagamentos de fatura (categorias tipo `credit_card`).

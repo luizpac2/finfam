@@ -113,9 +113,10 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   (`domain/paymentMethod.inferPaymentMethod`) pela descrição (Pix/TED/boleto/dinheiro/…); no
   "modo cartão" já é `credit_card`. **Regras** também definem a forma (`applyUserRules` retorna
   `paymentMethod`; "Aplicar ao histórico" grava categoria e/ou forma). Edição em massa em
-  Transações: além de categoria e cartão, muda o **tipo** (receita/despesa) via `setTypeMany`.
-  Serviços tolerantes à coluna ausente (migrações 0016/0017 pendentes): reenviam sem a coluna
-  (`runTolerant`/fallbacks; `setPaymentMethodMany` só ignora).
+  Transações: além de categoria e cartão, define a **forma de pagamento** via
+  `setPaymentMethodMany` (opção "Nenhuma (limpar)" = null). Serviços tolerantes à coluna
+  ausente (migrações 0016/0017 pendentes): reenviam sem a coluna (`runTolerant`/fallbacks;
+  `setPaymentMethodMany` só ignora).
 - **Percentuais em Transações (discretos):** sob a categoria, quanto ela representa dos gastos
   do **mês** e do **ano** (mesmo tipo); sob o valor, quanto o lançamento representa do total do
   mês (mesmo tipo). Mês vem dos lançamentos já carregados; ano via `listLite` do ano inteiro

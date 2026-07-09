@@ -26,7 +26,8 @@ import { Card } from '../components/ui/Card';
 import { CategorySelect } from '../components/ui/CategorySelect';
 import { CategoryIcon } from '../lib/categoryIcons';
 import { formatCurrencyAccounting, formatDate } from '../lib/format';
-import { PaymentMethodLabel } from '../domain/constants';
+import { PaymentMethodLabel, PaymentMethodOrder } from '../domain/constants';
+import type { PaymentMethod } from '../lib/database.types';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const isoDate = (d: Date) =>
@@ -70,7 +71,7 @@ export default function TransactionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkCard, setBulkCard] = useState('');
-  const [bulkType, setBulkType] = useState('');
+  const [bulkPayment, setBulkPayment] = useState('');
   const [applyingBulk, setApplyingBulk] = useState(false);
   const headerCbRef = useRef<HTMLInputElement>(null);
 
@@ -339,15 +340,17 @@ export default function TransactionsPage() {
     }
   };
 
-  const applyBulkType = async () => {
-    if (bulkType !== 'income' && bulkType !== 'expense') return;
+  const applyBulkPayment = async () => {
+    if (!bulkPayment) return;
     const ids = [...selectedIds];
+    const method =
+      bulkPayment === 'NONE' ? null : (bulkPayment as PaymentMethod);
     setApplyingBulk(true);
     try {
-      await transactionService.setTypeMany(ids, bulkType);
-      toast.success(`Tipo alterado em ${ids.length} lançamento(s).`);
+      await transactionService.setPaymentMethodMany(ids, method);
+      toast.success(`Forma de pagamento alterada em ${ids.length} lançamento(s).`);
       setSelectedIds(new Set());
-      setBulkType('');
+      setBulkPayment('');
       await loadTransactions(period);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao atualizar.');
@@ -587,22 +590,26 @@ export default function TransactionsPage() {
                   </>
                 )}
                 <select
-                  value={bulkType}
-                  onChange={(e) => setBulkType(e.target.value)}
-                  aria-label="Mudar o tipo do lançamento"
-                  className="w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua sm:w-44"
+                  value={bulkPayment}
+                  onChange={(e) => setBulkPayment(e.target.value)}
+                  aria-label="Mudar a forma de pagamento"
+                  className="w-full rounded-lg border border-brand-moss/25 bg-white px-3 py-2 text-sm text-brand-moss outline-none transition focus:border-brand-aqua sm:w-48"
                 >
-                  <option value="">Mudar tipo para…</option>
-                  <option value="income">Receita</option>
-                  <option value="expense">Despesa</option>
+                  <option value="">Forma de pagamento…</option>
+                  {PaymentMethodOrder.map((m) => (
+                    <option key={m} value={m}>
+                      {PaymentMethodLabel[m]}
+                    </option>
+                  ))}
+                  <option value="NONE">Nenhuma (limpar)</option>
                 </select>
                 <button
                   type="button"
-                  onClick={applyBulkType}
-                  disabled={!bulkType || applyingBulk}
+                  onClick={applyBulkPayment}
+                  disabled={!bulkPayment || applyingBulk}
                   className="rounded-lg border border-brand-moss/25 px-3 py-1.5 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Aplicar tipo
+                  Aplicar forma
                 </button>
                 <button
                   type="button"
