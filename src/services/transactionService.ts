@@ -175,11 +175,13 @@ export const transactionService = {
    */
   async listLite(filters: TransactionFilters = {}): Promise<TransactionLite[]> {
     const BASE = 'id, date, description, amount, type, category_id';
-    const build = (select: string) => {
+    const PAGE = 1000;
+    const build = (select: string, from: number, to: number) => {
       let query = supabase
         .from(TABLE)
         .select(select)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(from, to);
       if (filters.type) query = query.eq('type', filters.type);
       if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
       if (filters.from) query = query.gte('date', filters.from);
@@ -187,19 +189,40 @@ export const transactionService = {
       return query;
     };
 
-    // Tenta trazer a flag manual + forma de pagamento; se alguma migração
-    // (0013/0016) ainda não rodou, degrada o SELECT progressivamente.
-    let res = await build(`${BASE}, manual_category, payment_method`);
+    // Descobre o SELECT que funciona: tenta flag manual + forma de pagamento e,
+    // se alguma migração (0013/0016) não rodou, degrada progressivamente.
+    let select = `${BASE}, manual_category, payment_method`;
+    let res = await build(select, 0, PAGE - 1);
     if (
       res.error &&
       (isMissingManualColumn(res.error) || isMissingPaymentColumn(res.error))
     ) {
-      res = await build(`${BASE}, manual_category`);
-      if (res.error && isMissingManualColumn(res.error)) res = await build(BASE);
+      select = `${BASE}, manual_category`;
+      res = await build(select, 0, PAGE - 1);
+      if (res.error && isMissingManualColumn(res.error)) {
+        select = BASE;
+        res = await build(select, 0, PAGE - 1);
+      }
     }
 
-    const rows = unwrap(res, 'listar as transações');
-    return (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    // Pagina até o fim: o Supabase corta cada resposta (padrão 1000 linhas) e o
+    // "Aplicar ao histórico" precisa de TODOS os lançamentos — inclusive os mais
+    // antigos, que senão ficariam fora dos 1000 mais recentes.
+    let batch = unwrap(res, 'listar as transações') as unknown as Array<
+      Record<string, unknown>
+    >;
+    const rows: Array<Record<string, unknown>> = [...batch];
+    let page = 1;
+    while (batch.length === PAGE) {
+      const next = await build(select, page * PAGE, page * PAGE + PAGE - 1);
+      batch = unwrap(next, 'listar as transações') as unknown as Array<
+        Record<string, unknown>
+      >;
+      rows.push(...batch);
+      page += 1;
+    }
+
+    return rows.map((r) => ({
       id: r.id as string,
       date: r.date as string,
       description: r.description as string,
