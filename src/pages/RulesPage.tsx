@@ -1,4 +1,10 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import {
   Ban,
   Eraser,
@@ -104,6 +110,20 @@ export default function RulesPage() {
     setCategoryId('');
     setRulePayment('');
   };
+
+  // Detecta se a coluna manual_category (migração 0013) existe. Sem ela, o
+  // "Aplicar ao histórico" roda em MODO SEGURO (não altera o que já tem
+  // categoria) — e é bom avisar o admin, senão parece que a regra não funciona.
+  const [manualReady, setManualReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    transactionService.hasManualCategoryColumn().then((ok) => {
+      if (active) setManualReady(ok);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();
@@ -427,6 +447,28 @@ export default function RulesPage() {
           Seguro”. Vale na importação e ao “Categorizar automaticamente”.
         </p>
       </header>
+
+      {manualReady === false && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 p-4 text-sm text-amber-900">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" strokeWidth={1.8} />
+          <div className="min-w-0 space-y-2">
+            <p>
+              <strong>Modo seguro ativo.</strong> O “Aplicar ao histórico” só
+              mexe em lançamentos <strong>sem categoria</strong> — não altera os
+              que já têm uma (pra não apagar edições manuais). Por isso uma regra
+              pode dizer “Nenhum lançamento para atualizar” mesmo casando.
+            </p>
+            <p>
+              Para liberar a recategorização completa (protegendo só as edições
+              feitas à mão), rode isto <strong>uma vez</strong> no{' '}
+              <em>SQL Editor</em> do Supabase e recarregue a página:
+            </p>
+            <pre className="overflow-x-auto rounded-lg bg-amber-100/70 px-3 py-2 text-xs text-amber-900">
+alter table public.transactions{'\n'}  add column if not exists manual_category boolean not null default false;
+            </pre>
+          </div>
+        </div>
+      )}
 
       {/* Formulário — compacto (cria ou edita) */}
       <Card className={`p-4 ${editingId ? 'ring-2 ring-brand-aqua/50' : ''}`}>
