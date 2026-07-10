@@ -218,38 +218,57 @@ export default function RulesPage() {
       const ruleKind = rule.categoryId
         ? categoryById.get(rule.categoryId)?.kind
         : undefined;
-      // Categoria: respeita o tipo e não toca no que já está certo.
-      const catIds =
-        rule.categoryId != null
-          ? all
-              .filter(
-                (tx) =>
-                  !isCategoryLocked(tx, hasManual) &&
-                  categoryKindMatchesType(ruleKind, tx.type) &&
-                  tx.categoryId !== rule.categoryId &&
-                  ruleMatches(rule, tx.description, tx.amount)
-              )
-              .map((tx) => tx.id)
-          : [];
-      // Forma de pagamento: só onde ainda difere.
-      const payIds =
-        rule.paymentMethod != null
-          ? all
-              .filter(
-                (tx) =>
-                  !isCategoryLocked(tx, hasManual) &&
-                  tx.paymentMethod !== rule.paymentMethod &&
-                  ruleMatches(rule, tx.description, tx.amount)
-              )
-              .map((tx) => tx.id)
-          : [];
 
-      const total = new Set([...catIds, ...payIds]).size;
-      if (total === 0) {
-        toast.info('Nenhum lançamento do histórico para atualizar.');
-        return;
+      // Separa os que casam com a regra em LIVRES e PROTEGIDOS (categoria
+      // definida à mão / modo seguro). Categoria respeita o tipo e ignora o que
+      // já está certo; forma de pagamento, só onde difere.
+      const catFree: string[] = [];
+      const catLocked: string[] = [];
+      const payFree: string[] = [];
+      const payLocked: string[] = [];
+      for (const tx of all) {
+        const locked = isCategoryLocked(tx, hasManual);
+        const catMatch =
+          rule.categoryId != null &&
+          categoryKindMatchesType(ruleKind, tx.type) &&
+          tx.categoryId !== rule.categoryId &&
+          ruleMatches(rule, tx.description, tx.amount);
+        const payMatch =
+          rule.paymentMethod != null &&
+          tx.paymentMethod !== rule.paymentMethod &&
+          ruleMatches(rule, tx.description, tx.amount);
+        if (catMatch) (locked ? catLocked : catFree).push(tx.id);
+        if (payMatch) (locked ? payLocked : payFree).push(tx.id);
       }
+
+      const freeTotal = new Set([...catFree, ...payFree]).size;
+      const lockedTotal = new Set([...catLocked, ...payLocked]).size;
+
+      // Se nada "livre" casa, distingue "não casa nada" de "só há protegidos"
+      // (aí oferece forçar) — em vez do genérico "nada para atualizar".
+      let force = false;
+      if (freeTotal === 0) {
+        if (lockedTotal === 0) {
+          toast.info(
+            'Nenhum lançamento casa com essa regra (ou já está como ela define).'
+          );
+          return;
+        }
+        if (
+          !window.confirm(
+            `${lockedTotal} lançamento(s) casam com a regra, mas têm a categoria definida à mão (protegidos das regras). Aplicar a regra neles mesmo assim?`
+          )
+        )
+          return;
+        force = true;
+      }
+
+      const catIds = force ? [...catFree, ...catLocked] : catFree;
+      const payIds = force ? [...payFree, ...payLocked] : payFree;
+      const total = new Set([...catIds, ...payIds]).size;
+
       if (
+        !force &&
         !window.confirm(
           `Aplicar a regra "${ruleConditionLabel(rule, formatCurrency)}" a ${total} lançamento(s) do histórico?`
         )
