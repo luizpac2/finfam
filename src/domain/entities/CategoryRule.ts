@@ -41,7 +41,9 @@ export interface CategoryRuleInput {
 export const mapToCategoryRule = (row: CategoryRuleRow): CategoryRule => ({
   id: row.id,
   keyword: row.keyword ?? '',
-  amount: row.amount,
+  // PostgREST pode devolver numeric como string; normaliza p/ número (igual às
+  // transações) para a comparação de valor da regra ser sempre numérica.
+  amount: row.amount == null ? null : Number(row.amount),
   action: row.action,
   categoryId: row.category_id,
   // Tolerante à migração 0017 ainda não aplicada (coluna ausente → null).

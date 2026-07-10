@@ -20,3 +20,7 @@ alter table public.transactions
 
 comment on column public.transactions.manual_category is
   'true quando a categoria foi definida manualmente pelo usuário; a aplicação de regras ao histórico e a categorização automática não sobrescrevem estes lançamentos.';
+
+-- Força o PostgREST a recarregar o cache de schema para enxergar a coluna nova
+-- imediatamente (senão o app pode continuar em "modo seguro" por alguns minutos).
+notify pgrst, 'reload schema';
