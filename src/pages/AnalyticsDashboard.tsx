@@ -15,68 +15,67 @@ import {
   type GroupBy,
   type Insight,
 } from '../domain/dashboardAnalytics';
-import { UNCATEGORIZED } from '../components/filters/CategoryFilter';
-import type { Period } from '../components/filters/PeriodNavigator';
-import { DashboardFilters } from '../components/dashboard/DashboardFilters';
+import {
+  CategoryFilter,
+  UNCATEGORIZED,
+} from '../components/filters/CategoryFilter';
+import { FilterCard } from '../components/filters/FilterCard';
+import { YearPeriodFilter } from '../components/filters/YearPeriodFilter';
 import { IncomeExpenseBarChart } from '../components/dashboard/IncomeExpenseBarChart';
 import { CategoryBarChart } from '../components/dashboard/CategoryBarChart';
 import { CumulativeBalanceChart } from '../components/dashboard/CumulativeBalanceChart';
 import { TopCategoriesChart } from '../components/dashboard/TopCategoriesChart';
 import { YearlyComparisonChart } from '../components/dashboard/YearlyComparisonChart';
-import {
-  formatCurrency,
-  formatCurrencyAccounting,
-} from '../lib/format';
+import { formatCurrency, formatCurrencyAccounting } from '../lib/format';
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const iso = (d: Date) =>
+const isoDate = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 const now = new Date();
-const CURRENT: Period = { month: now.getMonth(), year: now.getFullYear() };
-const toIndex = (p: Period) => p.year * 12 + p.month;
-const fromIndex = (i: number): Period => ({
-  year: Math.floor(i / 12),
-  month: i % 12,
-});
+const CURRENT_YEAR = now.getFullYear();
+const CURRENT_MONTH = now.getMonth(); // 0-based
 
-const MONTH_SHORT = new Intl.DateTimeFormat('pt-BR', { month: 'short' });
-const periodLabel = (p: Period) =>
-  `${MONTH_SHORT.format(new Date(p.year, p.month, 1)).replace('.', '')}/${String(
-    p.year
-  ).slice(2)}`;
+const TOP_N = 8;
 
-/** Página Dashboard: análises e insights com filtros de período inteligentes. */
+/**
+ * Página Dashboard: análises e insights. O período é por **ano** — o MESMO
+ * filtro da Visão geral (`YearPeriodFilter`): um ou vários anos, ou "todo o
+ * período". Um ano só → série mensal; vários anos → série anual.
+ */
 export default function AnalyticsDashboard() {
   const toast = useToast();
+  const { categories, loadingCategories } = useReferenceData();
 
-  const { categories } = useReferenceData();
-  const [min, setMin] = useState<Period>(CURRENT);
-  const [from, setFrom] = useState<Period>(fromIndex(toIndex(CURRENT) - 11));
-  const [to, setTo] = useState<Period>(CURRENT);
-  const [groupBy, setGroupBy] = useState<GroupBy>('month');
+  const [availableYears, setAvailableYears] = useState<number[]>([CURRENT_YEAR]);
+  const [selectedYears, setSelectedYears] = useState<Set<number>>(
+    new Set([CURRENT_YEAR])
+  );
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [rangeTx, setRangeTx] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Ordena o intervalo (caso "De" fique depois de "Até").
-  const [f, t] = useMemo<[Period, Period]>(
-    () => (toIndex(from) <= toIndex(to) ? [from, to] : [to, from]),
-    [from, to]
+  const yearsSorted = useMemo(
+    () => [...selectedYears].sort((a, b) => a - b),
+    [selectedYears]
   );
-  const fromDate = useMemo(() => new Date(f.year, f.month, 1), [f]);
-  const toDate = useMemo(() => new Date(t.year, t.month, 1), [t]);
+  const minYear = yearsSorted[0] ?? CURRENT_YEAR;
+  const maxYear = yearsSorted[yearsSorted.length - 1] ?? CURRENT_YEAR;
+  const isAllPeriod =
+    availableYears.length > 0 && selectedYears.size === availableYears.length;
 
-  // Menor mês com dados (para o preset "Tudo"). Categorias vêm do cache.
+  // Anos que têm lançamentos (opções do período). Default: o mais recente.
   useEffect(() => {
     let active = true;
     transactionService.monthsWithData().then((months) => {
       if (!active) return;
-      const keys = [...months].sort();
-      if (keys[0]) {
-        const [y, m] = keys[0].split('-').map(Number);
-        setMin({ year: y, month: m - 1 });
+      const years = [
+        ...new Set([...months].map((m) => Number(m.slice(0, 4)))),
+      ].sort((a, b) => a - b);
+      if (years.length) {
+        setAvailableYears(years);
+        setSelectedYears(new Set([years[years.length - 1]]));
       }
     });
     return () => {
@@ -84,23 +83,25 @@ export default function AnalyticsDashboard() {
     };
   }, []);
 
-  // Carrega os lançamentos do intervalo selecionado.
+  // Carrega os lançamentos do intervalo [minAno, maxAno]; o recorte fino por
+  // ano/categoria é feito em memória.
   useEffect(() => {
     let active = true;
     setLoading(true);
-    const start = iso(new Date(f.year, f.month, 1));
-    const end = iso(new Date(t.year, t.month + 1, 0));
     transactionService
-      .list({ from: start, to: end })
+      .list({
+        from: `${minYear}-01-01`,
+        to: isoDate(new Date(maxYear, 11, 31)),
+      })
       .then((list) => {
-        if (active) setTransactions(list);
+        if (active) setRangeTx(list);
       })
       .catch((err) => {
         if (active) {
           toast.error(
             err instanceof Error ? err.message : 'Falha ao carregar os dados.'
           );
-          setTransactions([]);
+          setRangeTx([]);
         }
       })
       .finally(() => {
@@ -109,38 +110,70 @@ export default function AnalyticsDashboard() {
     return () => {
       active = false;
     };
-  }, [f, t, toast]);
+  }, [minYear, maxYear, toast]);
 
-  // Selecionar uma categoria-pai inclui as subcategorias.
+  // Recorte por ano + filtro de categorias (pai inclui subcategorias).
   const effectiveCats = useMemo(
     () => expandCategorySelection(selectedCats, categories),
     [selectedCats, categories]
   );
-  const visibleTx = useMemo(() => {
-    if (effectiveCats.size === 0) return transactions;
-    return transactions.filter((tx) =>
-      effectiveCats.has(tx.categoryId ?? UNCATEGORIZED)
-    );
-  }, [transactions, effectiveCats]);
-
-  const series = useMemo(
-    () => buildSeries(visibleTx, fromDate, toDate, groupBy),
-    [visibleTx, fromDate, toDate, groupBy]
+  const visibleTx = useMemo(
+    () =>
+      rangeTx.filter((tx) => {
+        if (!selectedYears.has(Number(tx.date.slice(0, 4)))) return false;
+        if (effectiveCats.size === 0) return true;
+        return effectiveCats.has(tx.categoryId ?? UNCATEGORIZED);
+      }),
+    [rangeTx, selectedYears, effectiveCats]
   );
+
+  // Um ano → série mensal; vários anos → série anual (só os selecionados).
+  const groupBy: GroupBy = selectedYears.size <= 1 ? 'month' : 'year';
+  const fromDate = useMemo(() => new Date(minYear, 0, 1), [minYear]);
+  const toDate = useMemo(() => new Date(maxYear, 11, 1), [maxYear]);
+  const series = useMemo(() => {
+    const s = buildSeries(visibleTx, fromDate, toDate, groupBy);
+    return groupBy === 'year'
+      ? s.filter((p) => selectedYears.has(Number(p.key)))
+      : s;
+  }, [visibleTx, fromDate, toDate, groupBy, selectedYears]);
+
+  // Meses decorridos nos anos escolhidos (para as médias mensais).
+  const monthsCount = useMemo(() => {
+    let m = 0;
+    for (const y of selectedYears) {
+      if (y < CURRENT_YEAR) m += 12;
+      else if (y === CURRENT_YEAR) m += CURRENT_MONTH + 1;
+    }
+    return Math.max(m, 1);
+  }, [selectedYears]);
+
   const cumulative = useMemo(() => cumulativeNet(series), [series]);
   const catSlices = useMemo(() => expenseByCategory(visibleTx), [visibleTx]);
-  const topCats = useMemo(() => catSlices.slice(0, 8), [catSlices]);
+  const topCats = useMemo(() => catSlices.slice(0, TOP_N), [catSlices]);
   const years = useMemo(() => yearlyTotals(visibleTx), [visibleTx]);
-  const stats = useMemo(
-    () => computeStats(series, catSlices, fromDate, toDate),
-    [series, catSlices, fromDate, toDate]
-  );
-  const insights = useMemo(
-    () => buildInsights(stats, series),
-    [stats, series]
-  );
 
-  const rangeLabel = `${periodLabel(f)} – ${periodLabel(t)}`;
+  // Médias pelos meses REALMENTE selecionados (anos podem não ser contíguos).
+  const stats = useMemo(() => {
+    const base = computeStats(series, catSlices, fromDate, toDate);
+    return {
+      ...base,
+      months: monthsCount,
+      avgIncome: base.totalIncome / monthsCount,
+      avgExpense: base.totalExpense / monthsCount,
+    };
+  }, [series, catSlices, fromDate, toDate, monthsCount]);
+
+  const insights = useMemo(() => buildInsights(stats, series), [stats, series]);
+
+  const periodLabel =
+    selectedYears.size === 0
+      ? 'Nenhum ano'
+      : isAllPeriod
+        ? 'Todo o período'
+        : yearsSorted.length === 1
+          ? String(yearsSorted[0])
+          : yearsSorted.join(' · ');
   const savingsPct = `${Math.round(stats.savingsRate * 100)}%`;
 
   return (
@@ -150,29 +183,41 @@ export default function AnalyticsDashboard() {
           Dashboard
         </h1>
         <p className="mt-1 text-sm text-brand-gray">
-          Análises e insights do período — {rangeLabel}.
+          Análises e insights — {periodLabel}.
         </p>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
-        <DashboardFilters
-          from={from}
-          to={to}
-          onFromChange={setFrom}
-          onToChange={setTo}
-          groupBy={groupBy}
-          onGroupByChange={setGroupBy}
-          min={min}
-          categories={categories}
-          selectedCategories={selectedCats}
-          onCategoriesChange={setSelectedCats}
-        />
+        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          <YearPeriodFilter
+            availableYears={availableYears}
+            selected={selectedYears}
+            onChange={setSelectedYears}
+          />
+
+          <FilterCard title="Categorias">
+            <CategoryFilter
+              categories={categories}
+              selected={selectedCats}
+              onChange={setSelectedCats}
+              loading={loadingCategories}
+            />
+          </FilterCard>
+        </aside>
 
         <div className="min-w-0 space-y-6">
           {/* KPIs */}
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Stat label="Receitas" value={formatCurrency(stats.totalIncome)} tone="income" />
-            <Stat label="Despesas" value={formatCurrency(stats.totalExpense)} tone="expense" />
+            <Stat
+              label="Receitas"
+              value={formatCurrency(stats.totalIncome)}
+              tone="income"
+            />
+            <Stat
+              label="Despesas"
+              value={formatCurrency(stats.totalExpense)}
+              tone="expense"
+            />
             <Stat
               label="Saldo"
               value={formatCurrencyAccounting(stats.net)}
@@ -200,19 +245,27 @@ export default function AnalyticsDashboard() {
             />
           </section>
 
-          {/* Gráficos */}
+          {/* Gráficos — barras verticais ocupam a linha inteira */}
           <section className="grid gap-4 sm:gap-5 xl:grid-cols-2">
-            <Panel title="Receitas vs. Despesas" subtitle={rangeLabel} className="xl:col-span-2">
+            <Panel
+              title="Receitas vs. Despesas"
+              subtitle={groupBy === 'month' ? 'Por mês' : 'Por ano'}
+              className="xl:col-span-2"
+            >
               {loading ? <Loading /> : <IncomeExpenseBarChart data={series} />}
             </Panel>
 
-            <Panel title="Saldo acumulado" subtitle="Soma corrente do resultado" className="xl:col-span-2">
+            <Panel
+              title="Saldo acumulado"
+              subtitle="Soma corrente do resultado"
+              className="xl:col-span-2"
+            >
               {loading ? <Loading /> : <CumulativeBalanceChart data={cumulative} />}
             </Panel>
 
             <Panel
               title="Despesas por categoria"
-              subtitle={rangeLabel}
+              subtitle="Total no período"
               className="xl:col-span-2"
             >
               {loading ? <Loading /> : <CategoryBarChart data={topCats} />}
@@ -283,9 +336,7 @@ function Panel({ title, subtitle, className = '', children }: PanelProps) {
     >
       <div className="mb-5">
         <h2 className="text-base font-semibold text-brand-moss">{title}</h2>
-        {subtitle && (
-          <p className="text-xs capitalize text-brand-gray">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-xs text-brand-gray">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -313,7 +364,9 @@ function InsightsGrid({ insights }: { insights: Insight[] }) {
           key={ins.title}
           className="flex gap-3 rounded-xl border border-brand-moss/10 bg-brand-light/50 p-3"
         >
-          <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${dot[ins.tone]}`} />
+          <span
+            className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${dot[ins.tone]}`}
+          />
           <div>
             <p className="text-sm font-semibold text-brand-moss">{ins.title}</p>
             <p className="text-sm text-brand-gray">{ins.detail}</p>

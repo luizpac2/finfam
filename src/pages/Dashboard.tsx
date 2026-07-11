@@ -13,6 +13,8 @@ import { KpiCard } from '../components/dashboard/KpiCard';
 import { IncomeExpenseBarChart } from '../components/dashboard/IncomeExpenseBarChart';
 import { CategoryBarChart } from '../components/dashboard/CategoryBarChart';
 import { CategoryFilter, UNCATEGORIZED } from '../components/filters/CategoryFilter';
+import { FilterCard } from '../components/filters/FilterCard';
+import { YearPeriodFilter } from '../components/filters/YearPeriodFilter';
 import {
   BarChartSkeleton,
   KpiCardSkeleton,
@@ -178,14 +180,6 @@ export default function Dashboard() {
           ? String(yearsSorted[0])
           : yearsSorted.join(' · ');
 
-  const toggleYear = (year: number) =>
-    setSelectedYears((prev) => {
-      const next = new Set(prev);
-      if (next.has(year)) next.delete(year);
-      else next.add(year);
-      return next;
-    });
-
   return (
     <div className="space-y-6">
       <header>
@@ -199,45 +193,11 @@ export default function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <FilterCard title="Período">
-            <button
-              type="button"
-              onClick={() => setSelectedYears(new Set(availableYears))}
-              className={`mb-2 w-full rounded-lg px-2 py-1.5 text-left text-sm font-medium transition ${
-                isAllPeriod
-                  ? 'bg-brand-aqua/15 text-brand-moss'
-                  : 'text-brand-gray hover:bg-brand-light hover:text-brand-moss'
-              }`}
-            >
-              Todo o período
-            </button>
-            <div className="grid grid-cols-2 gap-1.5">
-              {availableYears
-                .slice()
-                .sort((a, b) => b - a)
-                .map((year) => {
-                  const active = selectedYears.has(year);
-                  return (
-                    <button
-                      key={year}
-                      type="button"
-                      onClick={() => toggleYear(year)}
-                      aria-pressed={active}
-                      className={`rounded-lg border px-2 py-1.5 text-sm font-medium tabular-nums transition ${
-                        active
-                          ? 'border-brand-aqua bg-brand-aqua/15 text-brand-moss'
-                          : 'border-brand-moss/15 text-brand-gray hover:border-brand-aqua/40 hover:text-brand-moss'
-                      }`}
-                    >
-                      {year}
-                    </button>
-                  );
-                })}
-            </div>
-            <p className="mt-2 text-xs text-brand-gray">
-              Escolha um ou mais anos.
-            </p>
-          </FilterCard>
+          <YearPeriodFilter
+            availableYears={availableYears}
+            selected={selectedYears}
+            onChange={setSelectedYears}
+          />
 
           <FilterCard title="Categorias">
             <CategoryFilter
@@ -319,17 +279,6 @@ export default function Dashboard() {
           </section>
         </div>
       </div>
-    </div>
-  );
-}
-
-function FilterCard({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-brand-moss/10 bg-white p-4 shadow-card">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-gray">
-        {title}
-      </h2>
-      {children}
     </div>
   );
 }

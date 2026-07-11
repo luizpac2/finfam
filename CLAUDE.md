@@ -58,6 +58,13 @@ src/
 `services`. Linhas do DB (snake_case) viram entidades de domínio (camelCase) via
 mappers em `domain/entities`. Erros de dados passam por `unwrap()` → `ServiceError`.
 
+⚠️ **Corte de 1000 linhas:** o Supabase limita cada resposta (~1000 linhas, config
+"Max rows"). Query sem `.range()` ordenada por `date desc` traz só os 1000 mais
+**recentes** e **perde os antigos em silêncio** (foi o bug do "Aplicar ao histórico"
+não achar lançamento de 2023). Em `transactionService`, `list`, `listLite` e
+`filteredTotals` paginam via `fetchAllPages()`. **Toda operação sobre o histórico
+inteiro precisa paginar.** (`listPaged` é a paginação de UI — não confundir.)
+
 ## Modelo de dados (Postgres/Supabase)
 
 Tabelas em `public`:
@@ -119,6 +126,9 @@ schema, atualize esse arquivo + os mappers + este CLAUDE.md.
   `setPaymentMethodMany` (opção "Nenhuma (limpar)" = null). Serviços tolerantes à coluna
   ausente (migrações 0016/0017 pendentes): reenviam sem a coluna (`runTolerant`/fallbacks;
   `setPaymentMethodMany` só ignora).
+- **Período dos dashboards:** Visão geral e Dashboard usam o MESMO filtro —
+  `components/filters/YearPeriodFilter` (por **ano**: um, vários, ou "todo o período").
+  1 ano → série mensal; vários anos → série anual. Ao mexer, mexa nos dois (é o mesmo componente).
 - **Percentuais em Transações (discretos):** sob a categoria, quanto ela representa dos gastos
   do **mês** e do **ano** (mesmo tipo); sob o valor, quanto o lançamento representa do total do
   mês (mesmo tipo). Mês vem dos lançamentos já carregados; ano via `listLite` do ano inteiro
