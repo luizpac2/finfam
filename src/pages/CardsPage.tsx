@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Check, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Check, Clock, Loader2, Plus, Trash2, X } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
@@ -47,7 +47,7 @@ const monthsBetween = (start: string, end: string): string[] => {
   return out;
 };
 
-type Coverage = 'uploaded' | 'missing' | 'na';
+type Coverage = 'uploaded' | 'missing' | 'pending' | 'na';
 
 /**
  * Controle de cartões de crédito: declara os cartões vigentes (e quando foram
@@ -119,14 +119,10 @@ export default function CardsPage() {
     const closedYm = card.closedAt ? card.closedAt.slice(0, 7) : null;
     if (closedYm && ym > closedYm) return 'na'; // após o cancelamento
     if (ym < openedMonth(card)) return 'na'; // antes de "vigente desde"
-    return 'missing'; // vigente e sem fatura naquele mês
+    // Mês em curso: a fatura ainda não fechou — não é "faltando", é "aguardando".
+    if (ym === now) return 'pending';
+    return 'missing'; // mês já fechado, vigente e sem fatura importada
   };
-
-  // Status do mês atual (só cartões vigentes).
-  const activeCards = cards.filter((c) => !c.closedAt);
-  const missingThisMonth = activeCards.filter(
-    (c) => coverage(c, now) === 'missing'
-  );
 
   const handleAdd = async (event: FormEvent) => {
     event.preventDefault();
@@ -200,35 +196,6 @@ export default function CardsPage() {
           um já foi importada.
         </p>
       </header>
-
-      {/* Status do mês atual */}
-      {activeCards.length > 0 && (
-        <Card
-          className={
-            missingThisMonth.length > 0
-              ? 'border-brand-expense/30 bg-brand-expense/5'
-              : 'border-brand-income/30 bg-brand-income/5'
-          }
-        >
-          <p className="text-sm font-semibold text-brand-moss">
-            Faturas de {ymLabel(now)}
-          </p>
-          {missingThisMonth.length === 0 ? (
-            <p className="mt-1 text-sm text-brand-income">
-              Tudo em dia — todas as faturas dos cartões vigentes foram
-              importadas. ✓
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-brand-expense">
-              Faltando importar:{' '}
-              <strong>
-                {missingThisMonth.map((c) => c.name).join(', ')}
-              </strong>
-              .
-            </p>
-          )}
-        </Card>
-      )}
 
       {/* Gestão dos cartões */}
       {isAdmin && (
@@ -457,6 +424,13 @@ export default function CardsPage() {
                                 >
                                   <X className="h-3.5 w-3.5" />
                                 </span>
+                              ) : cov === 'pending' ? (
+                                <span
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-gray/10 text-brand-gray"
+                                  title="Mês em curso — a fatura ainda não fechou"
+                                >
+                                  <Clock className="h-3.5 w-3.5" />
+                                </span>
                               ) : (
                                 <span
                                   className="text-brand-gray/40"
@@ -481,6 +455,10 @@ export default function CardsPage() {
               </span>
               <span className="inline-flex items-center gap-1">
                 <X className="h-3.5 w-3.5 text-brand-expense" /> faltando
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-brand-gray" /> mês em curso (a
+                fatura ainda não fechou)
               </span>
               <span className="inline-flex items-center gap-1">
                 — fora do período (antes do 1º uso ou após o cancelamento)
