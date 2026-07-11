@@ -34,6 +34,7 @@ export interface Database {
           parent_id: string | null;
           opened_at: string | null;
           closed_at: string | null;
+          closed_registered_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -46,6 +47,7 @@ export interface Database {
           parent_id?: string | null;
           opened_at?: string | null;
           closed_at?: string | null;
+          closed_registered_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -58,6 +60,7 @@ export interface Database {
           parent_id?: string | null;
           opened_at?: string | null;
           closed_at?: string | null;
+          closed_registered_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };

@@ -15,6 +15,8 @@ export interface Category {
   openedAt: string | null;
   /** Cartões (`credit_card`): data de cancelamento; null = vigente. */
   closedAt: string | null;
+  /** Momento (dia e hora) em que o cancelamento foi registrado; null = vigente. */
+  closedRegisteredAt: string | null;
   createdAt: string;
 }
 
@@ -26,6 +28,7 @@ export interface CategoryInput {
   parentId?: string | null;
   openedAt?: string | null;
   closedAt?: string | null;
+  closedRegisteredAt?: string | null;
 }
 
 /** Mapeia uma linha da tabela `categories` para a entidade de domínio. */
@@ -38,6 +41,8 @@ export const mapToCategory = (row: CategoryRow): Category => ({
   parentId: row.parent_id,
   openedAt: row.opened_at,
   closedAt: row.closed_at,
+  // Tolerante à migração 0018 ainda não aplicada (coluna ausente → null).
+  closedRegisteredAt: row.closed_registered_at ?? null,
   createdAt: row.created_at,
 });
 
@@ -53,6 +58,8 @@ export const mapToCategoryRow = (
   if (input.parentId !== undefined) row.parent_id = input.parentId;
   if (input.openedAt !== undefined) row.opened_at = input.openedAt;
   if (input.closedAt !== undefined) row.closed_at = input.closedAt;
+  if (input.closedRegisteredAt !== undefined)
+    row.closed_registered_at = input.closedRegisteredAt;
   return row;
 };
 

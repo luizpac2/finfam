@@ -72,7 +72,9 @@ Tabelas em `public`:
   `full_name`, `role` (`admin`|`member`), `status` (`invited`|`active`|`revoked`), `avatar_url`.
 - **categories** — `id`, `name`, `icon`, `color`, `kind` (`income`|`expense`|`credit_card`),
   `parent_id` (subcategorias, self-FK), `opened_at`/`closed_at` (cartão: vigente desde /
-  cancelado em; ambos null = vigente sem data). Cada cartão de crédito é uma categoria `credit_card`.
+  cancelado em; ambos null = vigente sem data), `closed_registered_at` (timestamptz: o
+  **momento** em que o cancelamento foi registrado — auditoria; `closed_at` é a data editável).
+  Cada cartão de crédito é uma categoria `credit_card`.
 - **transactions** — `id`, `date`, `description`, `amount` (sempre ≥0; sinal vem de `type`),
   `type` (`income`|`expense`), `status` (`pending`|`paid`|`cancelled`), `category_id`,
   `card_id` (→categoria do cartão, na importação de fatura), `user_id` (→users.id, o autor),
@@ -169,7 +171,8 @@ hardening · `0012` RPC `financial_summary` (resumo agregado no banco) · `0013`
 `categories.closed_at` (cartão vigente/cancelado) + RPC `card_months` (cobertura de faturas) ·
 `0015` `categories.opened_at` (cartão "vigente desde", para marcar faturas faltantes) · `0016`
 `transactions.payment_method` (forma de movimentação: cartão/Pix/TED/dinheiro/débito/boleto) ·
-`0017` `category_rules.payment_method` (regra também classifica a forma de pagamento).
+`0017` `category_rules.payment_method` (regra também classifica a forma de pagamento) · `0018`
+`categories.closed_registered_at` (dia e hora do cancelamento do cartão).
 `supabase/reset.sql` recria do zero (fora de `migrations/`).
 
 ## Deploy (ver DEPLOY.md)

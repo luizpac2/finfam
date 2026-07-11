@@ -48,3 +48,19 @@ export const formatDate = (isoDate: string): string => {
   const date = new Date(`${isoDate}T00:00:00`);
   return dateFormatter.format(date);
 };
+
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Formata um timestamp ISO como "DD/MM/AAAA às HH:MM" (fuso local). */
+export const formatDateTime = (isoTimestamp: string): string => {
+  if (!isoTimestamp) return '';
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return dateTimeFormatter.format(date).replace(', ', ' às ');
+};

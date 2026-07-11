@@ -9,6 +9,15 @@ import { unwrap } from './serviceError';
 
 const TABLE = 'categories';
 
+/** Erro do PostgREST de coluna `closed_registered_at` ausente (migração 0018 pendente). */
+const isMissingClosedRegisteredColumn = (
+  error: { message?: string; details?: string; hint?: string } | null
+): boolean =>
+  !!error &&
+  /closed_registered_at/i.test(
+    `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`
+  );
+
 /**
  * Serviço de acesso à tabela `categories`.
  * Retorna entidades de domínio (camelCase), nunca linhas cruas.
@@ -53,15 +62,24 @@ export const categoryService = {
 
   /** Atualiza uma categoria existente (restrito a admins por RLS). */
   async update(id: string, input: Partial<CategoryInput>): Promise<Category> {
-    const row = unwrap(
-      await supabase
-        .from(TABLE)
-        .update(mapToCategoryRow(input))
-        .eq('id', id)
-        .select()
-        .single(),
-      'atualizar a categoria'
-    );
+    const payload = mapToCategoryRow(input);
+    const run = (p: typeof payload) =>
+      supabase.from(TABLE).update(p).eq('id', id).select().single();
+
+    // Tolerante à migração 0018 pendente: reenvia sem `closed_registered_at`,
+    // para o cancelamento do cartão não falhar (só fica sem o dia/hora).
+    let res = await run(payload);
+    if (
+      res.error &&
+      'closed_registered_at' in payload &&
+      isMissingClosedRegisteredColumn(res.error)
+    ) {
+      const fallback = { ...payload };
+      delete fallback.closed_registered_at;
+      res = await run(fallback);
+    }
+
+    const row = unwrap(res, 'atualizar a categoria');
     return mapToCategory(row);
   },
 

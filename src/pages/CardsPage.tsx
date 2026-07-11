@@ -10,7 +10,7 @@ import { Card } from '../components/ui/Card';
 import { FullScreenLoader } from '../components/ui/FullScreenLoader';
 import { IconPicker } from '../components/ui/IconPicker';
 import { CategoryIcon } from '../lib/categoryIcons';
-import { formatDate } from '../lib/format';
+import { formatDate, formatDateTime } from '../lib/format';
 
 const DEFAULT_COLOR = '#6D7368';
 const MAX_MONTHS = 24;
@@ -149,7 +149,11 @@ export default function CardsPage() {
 
   const patchCard = async (
     card: Category,
-    patch: { openedAt?: string | null; closedAt?: string | null },
+    patch: {
+      openedAt?: string | null;
+      closedAt?: string | null;
+      closedRegisteredAt?: string | null;
+    },
     message: string
   ) => {
     setBusyId(card.id);
@@ -258,7 +262,7 @@ export default function CardsPage() {
                     key={card.id}
                     className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                       <span
                         className="flex h-8 w-8 items-center justify-center rounded-lg"
                         style={{ backgroundColor: `${card.color ?? '#D8D8D8'}33` }}
@@ -275,6 +279,14 @@ export default function CardsPage() {
                       ) : (
                         <span className="rounded-full bg-brand-income/15 px-2 py-0.5 text-xs font-medium text-brand-income">
                           Vigente
+                        </span>
+                      )}
+                      {card.closedAt && card.closedRegisteredAt && (
+                        <span
+                          className="text-xs text-brand-gray"
+                          title="Momento em que o cancelamento foi registrado no sistema"
+                        >
+                          registrado em {formatDateTime(card.closedRegisteredAt)}
                         </span>
                       )}
                     </div>
@@ -320,7 +332,7 @@ export default function CardsPage() {
                               onClick={() =>
                                 patchCard(
                                   card,
-                                  { closedAt: null },
+                                  { closedAt: null, closedRegisteredAt: null },
                                   'Cartão reativado.'
                                 )
                               }
@@ -337,7 +349,11 @@ export default function CardsPage() {
                             onClick={() =>
                               patchCard(
                                 card,
-                                { closedAt: todayIso() },
+                                {
+                                  closedAt: todayIso(),
+                                  // Registra o momento exato da ação (auditoria).
+                                  closedRegisteredAt: new Date().toISOString(),
+                                },
                                 `"${card.name}" marcado como cancelado.`
                               )
                             }
