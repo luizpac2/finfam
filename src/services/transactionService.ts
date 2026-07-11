@@ -148,21 +148,52 @@ export interface PagedResult {
   total: number;
 }
 
+/**
+ * Busca TODAS as linhas paginando em blocos de 1000 — contorna o corte de linhas
+ * do Supabase ("Max rows", padrão 1000). `buildPage` deve montar a query já com
+ * `.range(from, to)` aplicado. Sem isso, operações sobre todo o histórico
+ * perderiam os lançamentos mais antigos (fora dos 1000 mais recentes).
+ */
+const fetchAllPages = async (
+  buildPage: (
+    from: number,
+    to: number
+  ) => PromiseLike<{ data: unknown; error: PostgrestError | null }>,
+  context: string
+): Promise<Array<Record<string, unknown>>> => {
+  const PAGE = 1000;
+  const rows: Array<Record<string, unknown>> = [];
+  let page = 0;
+  for (;;) {
+    const batch = unwrap(
+      await buildPage(page * PAGE, page * PAGE + PAGE - 1),
+      context
+    ) as unknown as Array<Record<string, unknown>>;
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    page += 1;
+  }
+  return rows;
+};
+
 export const transactionService = {
   /** Lista transações com filtros opcionais, ordenadas pela data (desc). */
   async list(filters: TransactionFilters = {}): Promise<Transaction[]> {
-    let query = supabase
-      .from(TABLE)
-      .select(SELECT_WITH_CATEGORY)
-      .order('date', { ascending: false });
+    const buildPage = (from: number, to: number) => {
+      let query = supabase
+        .from(TABLE)
+        .select(SELECT_WITH_CATEGORY)
+        .order('date', { ascending: false })
+        .range(from, to);
+      if (filters.type) query = query.eq('type', filters.type);
+      if (filters.status) query = query.eq('status', filters.status);
+      if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
+      if (filters.from) query = query.gte('date', filters.from);
+      if (filters.to) query = query.lte('date', filters.to);
+      return query;
+    };
 
-    if (filters.type) query = query.eq('type', filters.type);
-    if (filters.status) query = query.eq('status', filters.status);
-    if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
-    if (filters.from) query = query.gte('date', filters.from);
-    if (filters.to) query = query.lte('date', filters.to);
-
-    const rows = unwrap(await query, 'listar as transações');
+    const rows = await fetchAllPages(buildPage, 'listar as transações');
     return (rows as unknown as TransactionRowWithCategory[]).map(
       mapToTransaction
     );
@@ -330,21 +361,30 @@ export const transactionService = {
   async filteredTotals(
     filters: PagedFilters
   ): Promise<{ income: number; expense: number }> {
-    let query = supabase.from(TABLE).select('amount, type');
-    if (filters.categoryIds && filters.categoryIds.length > 0)
-      query = query.in('category_id', filters.categoryIds);
-    else if (filters.categoryId)
-      query = query.eq('category_id', filters.categoryId);
-    if (filters.type) query = query.eq('type', filters.type);
-    if (filters.from) query = query.gte('date', filters.from);
-    if (filters.to) query = query.lte('date', filters.to);
-    if (filters.search) {
-      const or = buildSearchOr(filters.search);
-      if (or) query = query.or(or);
-    }
+    const buildPage = (from: number, to: number) => {
+      let query = supabase
+        .from(TABLE)
+        .select('amount, type')
+        .order('date', { ascending: false })
+        .range(from, to);
+      if (filters.categoryIds && filters.categoryIds.length > 0)
+        query = query.in('category_id', filters.categoryIds);
+      else if (filters.categoryId)
+        query = query.eq('category_id', filters.categoryId);
+      if (filters.type) query = query.eq('type', filters.type);
+      if (filters.from) query = query.gte('date', filters.from);
+      if (filters.to) query = query.lte('date', filters.to);
+      if (filters.search) {
+        const or = buildSearchOr(filters.search);
+        if (or) query = query.or(or);
+      }
+      return query;
+    };
 
-    const rows = unwrap(await query, 'somar as transações');
-    return (rows as unknown as Array<{ amount: number; type: TransactionType }>).reduce(
+    const rows = await fetchAllPages(buildPage, 'somar as transações');
+    return (
+      rows as unknown as Array<{ amount: number; type: TransactionType }>
+    ).reduce(
       (acc, r) => {
         if (r.type === 'income') acc.income += Number(r.amount);
         else acc.expense += Number(r.amount);
