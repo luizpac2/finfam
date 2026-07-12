@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Pencil, Plus, Search, Trash2, Wand2 } from 'lucide-react';
+import { Pencil, Plus, Search, Tag, Trash2 } from 'lucide-react';
 
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useReferenceData } from '../hooks/useReferenceData';
 import { transactionService } from '../services';
 import type { TransactionLite } from '../services/transactionService';
-import { suggestCategoryIdStrict } from '../domain/categorizationEngine';
 import { parseInstallment } from '../domain/installments';
-import { applyUserRules, categoryKindMap } from '../domain/ruleEngine';
 import {
   expandCategorySelection,
   type Category,
@@ -56,7 +54,7 @@ export default function TransactionsPage() {
     month: now.getMonth(),
     year: now.getFullYear(),
   });
-  const { categories, rules, loadingCategories } = useReferenceData();
+  const { categories, loadingCategories } = useReferenceData();
   const [monthsWithData, setMonthsWithData] = useState<Set<string>>();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   // Lançamentos do ANO inteiro (enxutos), para o percentual anual por categoria.
@@ -78,7 +76,6 @@ export default function TransactionsPage() {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [autoCategorizing, setAutoCategorizing] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -148,6 +145,13 @@ export default function TransactionsPage() {
     () => expandCategorySelection(selectedCats, categories),
     [selectedCats, categories]
   );
+
+  // Atalho "Sem categoria": é só o sentinela UNCATEGORIZED sozinho no filtro de
+  // categorias — por isso o botão e a barra lateral ficam sempre em sincronia.
+  const onlyUncategorized =
+    selectedCats.size === 1 && selectedCats.has(UNCATEGORIZED);
+  const toggleUncategorized = () =>
+    setSelectedCats(onlyUncategorized ? new Set() : new Set([UNCATEGORIZED]));
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -378,57 +382,6 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleAutoCategorize = async () => {
-    // Alvos: lançamentos sem categoria (ignora cancelados e pagamentos de
-    // fatura, que já têm a categoria do cartão).
-    const targets = transactions.filter(
-      (tx) =>
-        !tx.categoryId &&
-        !tx.manualCategory &&
-        tx.category?.kind !== 'credit_card'
-    );
-
-    // Agrupa por categoria: regra do usuário tem prioridade; senão a heurística
-    // estrita (só match real; ambíguos ficam de fora).
-    const kindById = categoryKindMap(categories);
-    const groups = new Map<string, string[]>();
-    for (const tx of targets) {
-      const rule = applyUserRules(
-        tx.description,
-        tx.amount,
-        tx.type,
-        rules,
-        kindById
-      );
-      const catId =
-        rule.categoryId ??
-        suggestCategoryIdStrict(tx.description, tx.type, categories);
-      if (!catId) continue;
-      const list = groups.get(catId) ?? [];
-      list.push(tx.id);
-      groups.set(catId, list);
-    }
-
-    const total = [...groups.values()].reduce((n, ids) => n + ids.length, 0);
-    if (total === 0) {
-      toast.info('Nenhum lançamento novo para categorizar neste período.');
-      return;
-    }
-
-    setAutoCategorizing(true);
-    try {
-      for (const [catId, ids] of groups) {
-        await transactionService.setCategoryMany(ids, catId);
-      }
-      toast.success(`${total} lançamento(s) categorizados automaticamente.`);
-      await loadTransactions(period);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falha ao categorizar.');
-    } finally {
-      setAutoCategorizing(false);
-    }
-  };
-
   const bulkDelete = async () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
@@ -502,18 +455,25 @@ export default function TransactionsPage() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="flex items-center gap-2">
+
+              {/* Atalho: só os lançamentos que ainda não têm categoria. Usa o
+                  mesmo filtro da barra lateral (fica marcado lá também). */}
               <button
                 type="button"
-                onClick={handleAutoCategorize}
-                disabled={autoCategorizing || loading}
-                title="Preenche a categoria dos lançamentos sem categoria pela descrição"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-moss/25 px-4 py-2 text-sm font-medium text-brand-moss transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={toggleUncategorized}
+                aria-pressed={onlyUncategorized}
+                title="Mostrar só os lançamentos sem categoria"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                  onlyUncategorized
+                    ? 'border-brand-aqua bg-brand-aqua/15 text-brand-moss'
+                    : 'border-brand-moss/25 text-brand-gray hover:border-brand-aqua/40 hover:text-brand-moss'
+                }`}
               >
-                <Wand2 className="h-4 w-4" />
-                {autoCategorizing ? 'Categorizando…' : 'Categorizar automaticamente'}
+                <Tag className="h-4 w-4" />
+                Sem categoria
               </button>
+            </div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={openNew}
